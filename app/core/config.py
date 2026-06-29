@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -169,7 +169,7 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         schedule_second=int(raw.get("schedule_second", default_second(raw["type"]))),
         host=_optional(raw.get("host")),
         port=int(raw.get("port", 161)),
-        community=_optional(raw.get("community")),
+        community=_optional_secret(raw, "community"),
         version=str(raw.get("version", "2c")),
         oids=dict(raw.get("oids", {})),
         walk_oids=dict(raw.get("walk_oids", {})),
@@ -222,3 +222,4 @@ def _optional_secret(raw: dict[str, Any], key: str) -> str | None:
 def is_unfilled_placeholder(value: str) -> bool:
     normalized = value.strip()
     return normalized == "" or normalized == TO_BE_FILLED or normalized.endswith(f"_{TO_BE_FILLED}")
+

@@ -1,4 +1,4 @@
-apiVersion: v1
+﻿apiVersion: v1
 kind: ConfigMap
 metadata:
   name: backup-dashboard-collector-zfs-config
@@ -15,8 +15,8 @@ data:
       hosts:
         - http://elasticsearch:9200
       index_prefix: backup-dashboard
-      username: elasticsearch_username_TO_BE_FILLED
-      password: elasticsearch_password_TO_BE_FILLED
+      username_file: /app/secrets/elasticsearch/username
+      password_file: /app/secrets/elasticsearch/password
       verify_certs: true
     collectors:
       - name: ZFS_1
@@ -27,9 +27,9 @@ data:
         base_url: ZFS_1_base_url_TO_BE_FILLED
         endpoint: ZFS_1_endpoint_TO_BE_FILLED
         method: GET
-        token: ZFS_1_token_TO_BE_FILLED
-        username: ZFS_1_username_TO_BE_FILLED
-        password: ZFS_1_password_TO_BE_FILLED
+        token_file: /app/secrets/zfs/zfs-1-token
+        username_file: /app/secrets/zfs/zfs-1-username
+        password_file: /app/secrets/zfs/zfs-1-password
         verify_tls: true
       - name: ZFS_2
         type: ZFS
@@ -39,9 +39,9 @@ data:
         base_url: ZFS_2_base_url_TO_BE_FILLED
         endpoint: ZFS_2_endpoint_TO_BE_FILLED
         method: GET
-        token: ZFS_2_token_TO_BE_FILLED
-        username: ZFS_2_username_TO_BE_FILLED
-        password: ZFS_2_password_TO_BE_FILLED
+        token_file: /app/secrets/zfs/zfs-2-token
+        username_file: /app/secrets/zfs/zfs-2-username
+        password_file: /app/secrets/zfs/zfs-2-password
         verify_tls: true
       - name: ZFS_3
         type: ZFS
@@ -51,9 +51,9 @@ data:
         base_url: ZFS_3_base_url_TO_BE_FILLED
         endpoint: ZFS_3_endpoint_TO_BE_FILLED
         method: GET
-        token: ZFS_3_token_TO_BE_FILLED
-        username: ZFS_3_username_TO_BE_FILLED
-        password: ZFS_3_password_TO_BE_FILLED
+        token_file: /app/secrets/zfs/zfs-3-token
+        username_file: /app/secrets/zfs/zfs-3-username
+        password_file: /app/secrets/zfs/zfs-3-password
         verify_tls: true
       - name: ZFS_4
         type: ZFS
@@ -63,9 +63,9 @@ data:
         base_url: ZFS_4_base_url_TO_BE_FILLED
         endpoint: ZFS_4_endpoint_TO_BE_FILLED
         method: GET
-        token: ZFS_4_token_TO_BE_FILLED
-        username: ZFS_4_username_TO_BE_FILLED
-        password: ZFS_4_password_TO_BE_FILLED
+        token_file: /app/secrets/zfs/zfs-4-token
+        username_file: /app/secrets/zfs/zfs-4-username
+        password_file: /app/secrets/zfs/zfs-4-password
         verify_tls: true
 ---
 apiVersion: apps/v1
@@ -105,6 +105,9 @@ spec:
             - name: config
               mountPath: /app/config/collector.yaml
               subPath: collector.yaml
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /readyz
@@ -128,6 +131,38 @@ spec:
         - name: config
           configMap:
             name: backup-dashboard-collector-zfs-config
+        - name: secrets
+          secret:
+            secretName: backup-dashboard-collector-zfs-secrets
+            items:
+              - key: elasticsearch-username
+                path: elasticsearch/username
+              - key: elasticsearch-password
+                path: elasticsearch/password
+              - key: zfs-1-token
+                path: zfs/zfs-1-token
+              - key: zfs-1-username
+                path: zfs/zfs-1-username
+              - key: zfs-1-password
+                path: zfs/zfs-1-password
+              - key: zfs-2-token
+                path: zfs/zfs-2-token
+              - key: zfs-2-username
+                path: zfs/zfs-2-username
+              - key: zfs-2-password
+                path: zfs/zfs-2-password
+              - key: zfs-3-token
+                path: zfs/zfs-3-token
+              - key: zfs-3-username
+                path: zfs/zfs-3-username
+              - key: zfs-3-password
+                path: zfs/zfs-3-password
+              - key: zfs-4-token
+                path: zfs/zfs-4-token
+              - key: zfs-4-username
+                path: zfs/zfs-4-username
+              - key: zfs-4-password
+                path: zfs/zfs-4-password
 ---
 apiVersion: v1
 kind: Service
@@ -144,3 +179,4 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+

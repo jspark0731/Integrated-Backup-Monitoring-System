@@ -1,4 +1,4 @@
-apiVersion: v1
+﻿apiVersion: v1
 kind: ConfigMap
 metadata:
   name: backup-dashboard-collector-dd-config
@@ -15,8 +15,8 @@ data:
       hosts:
         - http://elasticsearch:9200
       index_prefix: backup-dashboard
-      username: elasticsearch_username_TO_BE_FILLED
-      password: elasticsearch_password_TO_BE_FILLED
+      username_file: /app/secrets/elasticsearch/username
+      password_file: /app/secrets/elasticsearch/password
       verify_certs: true
     collectors:
       - name: DD4500
@@ -26,7 +26,7 @@ data:
         schedule_second: 0
         host: DD4500_host_TO_BE_FILLED
         port: 161
-        community: DD4500_community_TO_BE_FILLED
+        community_file: /app/secrets/dd/dd4500-community
         version: "2c"
         oids:
           capacity_total: DD4500_capacity_total_oid_TO_BE_FILLED
@@ -39,7 +39,7 @@ data:
         schedule_second: 0
         host: DD6900_1_host_TO_BE_FILLED
         port: 161
-        community: DD6900_1_community_TO_BE_FILLED
+        community_file: /app/secrets/dd/dd6900-1-community
         version: "2c"
         oids:
           capacity_total: DD6900_1_capacity_total_oid_TO_BE_FILLED
@@ -52,7 +52,7 @@ data:
         schedule_second: 0
         host: DD6900_2_host_TO_BE_FILLED
         port: 161
-        community: DD6900_2_community_TO_BE_FILLED
+        community_file: /app/secrets/dd/dd6900-2-community
         version: "2c"
         oids:
           capacity_total: DD6900_2_capacity_total_oid_TO_BE_FILLED
@@ -96,6 +96,9 @@ spec:
             - name: config
               mountPath: /app/config/collector.yaml
               subPath: collector.yaml
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /readyz
@@ -119,6 +122,20 @@ spec:
         - name: config
           configMap:
             name: backup-dashboard-collector-dd-config
+        - name: secrets
+          secret:
+            secretName: backup-dashboard-collector-dd-secrets
+            items:
+              - key: elasticsearch-username
+                path: elasticsearch/username
+              - key: elasticsearch-password
+                path: elasticsearch/password
+              - key: dd4500-community
+                path: dd/dd4500-community
+              - key: dd6900-1-community
+                path: dd/dd6900-1-community
+              - key: dd6900-2-community
+                path: dd/dd6900-2-community
 ---
 apiVersion: v1
 kind: Service
@@ -135,3 +152,4 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+

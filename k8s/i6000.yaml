@@ -1,4 +1,4 @@
-apiVersion: v1
+﻿apiVersion: v1
 kind: ConfigMap
 metadata:
   name: backup-dashboard-collector-i6000-config
@@ -15,8 +15,8 @@ data:
       hosts:
         - http://elasticsearch:9200
       index_prefix: backup-dashboard
-      username: elasticsearch_username_TO_BE_FILLED
-      password: elasticsearch_password_TO_BE_FILLED
+      username_file: /app/secrets/elasticsearch/username
+      password_file: /app/secrets/elasticsearch/password
       verify_certs: true
     collectors:
       - name: i6000_core_rest
@@ -25,8 +25,8 @@ data:
         enabled: true
         schedule_second: 15
         base_url: https://i6000_core_host_TO_BE_FILLED
-        username: i6000_core_username_TO_BE_FILLED
-        password: i6000_core_password_TO_BE_FILLED
+        username_file: /app/secrets/i6000/i6000-core-username
+        password_file: /app/secrets/i6000/i6000-core-password
         verify_tls: true
         endpoints: &i6000_endpoints
           ping: aml/
@@ -46,8 +46,8 @@ data:
         enabled: true
         schedule_second: 15
         base_url: https://i6000_chnl_host_TO_BE_FILLED
-        username: i6000_chnl_username_TO_BE_FILLED
-        password: i6000_chnl_password_TO_BE_FILLED
+        username_file: /app/secrets/i6000/i6000-chnl-username
+        password_file: /app/secrets/i6000/i6000-chnl-password
         verify_tls: true
         endpoints: *i6000_endpoints
       - name: i6000_info_rest
@@ -56,8 +56,8 @@ data:
         enabled: true
         schedule_second: 15
         base_url: https://i6000_info_host_TO_BE_FILLED
-        username: i6000_info_username_TO_BE_FILLED
-        password: i6000_info_password_TO_BE_FILLED
+        username_file: /app/secrets/i6000/i6000-info-username
+        password_file: /app/secrets/i6000/i6000-info-password
         verify_tls: true
         endpoints: *i6000_endpoints
       - name: i6000_ifrs_rest
@@ -66,8 +66,8 @@ data:
         enabled: true
         schedule_second: 15
         base_url: https://i6000_ifrs_host_TO_BE_FILLED
-        username: i6000_ifrs_username_TO_BE_FILLED
-        password: i6000_ifrs_password_TO_BE_FILLED
+        username_file: /app/secrets/i6000/i6000-ifrs-username
+        password_file: /app/secrets/i6000/i6000-ifrs-password
         verify_tls: true
         endpoints: *i6000_endpoints
 ---
@@ -108,6 +108,9 @@ spec:
             - name: config
               mountPath: /app/config/collector.yaml
               subPath: collector.yaml
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /readyz
@@ -131,6 +134,30 @@ spec:
         - name: config
           configMap:
             name: backup-dashboard-collector-i6000-config
+        - name: secrets
+          secret:
+            secretName: backup-dashboard-collector-i6000-secrets
+            items:
+              - key: elasticsearch-username
+                path: elasticsearch/username
+              - key: elasticsearch-password
+                path: elasticsearch/password
+              - key: i6000-core-username
+                path: i6000/i6000-core-username
+              - key: i6000-core-password
+                path: i6000/i6000-core-password
+              - key: i6000-chnl-username
+                path: i6000/i6000-chnl-username
+              - key: i6000-chnl-password
+                path: i6000/i6000-chnl-password
+              - key: i6000-info-username
+                path: i6000/i6000-info-username
+              - key: i6000-info-password
+                path: i6000/i6000-info-password
+              - key: i6000-ifrs-username
+                path: i6000/i6000-ifrs-username
+              - key: i6000-ifrs-password
+                path: i6000/i6000-ifrs-password
 ---
 apiVersion: v1
 kind: Service
@@ -147,3 +174,4 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+

@@ -1,4 +1,4 @@
-apiVersion: v1
+﻿apiVersion: v1
 kind: ConfigMap
 metadata:
   name: backup-dashboard-collector-networker-config
@@ -15,8 +15,8 @@ data:
       hosts:
         - http://elasticsearch:9200
       index_prefix: backup-dashboard
-      username: elasticsearch_username_TO_BE_FILLED
-      password: elasticsearch_password_TO_BE_FILLED
+      username_file: /app/secrets/elasticsearch/username
+      password_file: /app/secrets/elasticsearch/password
       verify_certs: true
     collectors:
       - name: networker_core
@@ -27,9 +27,9 @@ data:
         base_url: networker_core_base_url_TO_BE_FILLED
         endpoint: networker_core_endpoint_TO_BE_FILLED
         method: GET
-        token: networker_core_token_TO_BE_FILLED
-        username: networker_core_username_TO_BE_FILLED
-        password: networker_core_password_TO_BE_FILLED
+        token_file: /app/secrets/networker/networker-core-token
+        username_file: /app/secrets/networker/networker-core-username
+        password_file: /app/secrets/networker/networker-core-password
         verify_tls: true
       - name: networker_chnl
         type: Networker
@@ -39,9 +39,9 @@ data:
         base_url: networker_chnl_base_url_TO_BE_FILLED
         endpoint: networker_chnl_endpoint_TO_BE_FILLED
         method: GET
-        token: networker_chnl_token_TO_BE_FILLED
-        username: networker_chnl_username_TO_BE_FILLED
-        password: networker_chnl_password_TO_BE_FILLED
+        token_file: /app/secrets/networker/networker-chnl-token
+        username_file: /app/secrets/networker/networker-chnl-username
+        password_file: /app/secrets/networker/networker-chnl-password
         verify_tls: true
       - name: networker_info
         type: Networker
@@ -51,9 +51,9 @@ data:
         base_url: networker_info_base_url_TO_BE_FILLED
         endpoint: networker_info_endpoint_TO_BE_FILLED
         method: GET
-        token: networker_info_token_TO_BE_FILLED
-        username: networker_info_username_TO_BE_FILLED
-        password: networker_info_password_TO_BE_FILLED
+        token_file: /app/secrets/networker/networker-info-token
+        username_file: /app/secrets/networker/networker-info-username
+        password_file: /app/secrets/networker/networker-info-password
         verify_tls: true
       - name: networker_ifrs
         type: Networker
@@ -63,9 +63,9 @@ data:
         base_url: networker_ifrs_base_url_TO_BE_FILLED
         endpoint: networker_ifrs_endpoint_TO_BE_FILLED
         method: GET
-        token: networker_ifrs_token_TO_BE_FILLED
-        username: networker_ifrs_username_TO_BE_FILLED
-        password: networker_ifrs_password_TO_BE_FILLED
+        token_file: /app/secrets/networker/networker-ifrs-token
+        username_file: /app/secrets/networker/networker-ifrs-username
+        password_file: /app/secrets/networker/networker-ifrs-password
         verify_tls: true
 ---
 apiVersion: apps/v1
@@ -105,6 +105,9 @@ spec:
             - name: config
               mountPath: /app/config/collector.yaml
               subPath: collector.yaml
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /readyz
@@ -128,6 +131,38 @@ spec:
         - name: config
           configMap:
             name: backup-dashboard-collector-networker-config
+        - name: secrets
+          secret:
+            secretName: backup-dashboard-collector-networker-secrets
+            items:
+              - key: elasticsearch-username
+                path: elasticsearch/username
+              - key: elasticsearch-password
+                path: elasticsearch/password
+              - key: networker-core-token
+                path: networker/networker-core-token
+              - key: networker-core-username
+                path: networker/networker-core-username
+              - key: networker-core-password
+                path: networker/networker-core-password
+              - key: networker-chnl-token
+                path: networker/networker-chnl-token
+              - key: networker-chnl-username
+                path: networker/networker-chnl-username
+              - key: networker-chnl-password
+                path: networker/networker-chnl-password
+              - key: networker-info-token
+                path: networker/networker-info-token
+              - key: networker-info-username
+                path: networker/networker-info-username
+              - key: networker-info-password
+                path: networker/networker-info-password
+              - key: networker-ifrs-token
+                path: networker/networker-ifrs-token
+              - key: networker-ifrs-username
+                path: networker/networker-ifrs-username
+              - key: networker-ifrs-password
+                path: networker/networker-ifrs-password
 ---
 apiVersion: v1
 kind: Service
@@ -144,3 +179,4 @@ spec:
     - name: http
       port: 8080
       targetPort: http
+
