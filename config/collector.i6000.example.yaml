@@ -1,0 +1,68 @@
+app:
+  name: backup-dashboard-collector-i6000
+  log_level: INFO
+
+elasticsearch:
+  enabled: false
+  hosts:
+    - http://elasticsearch:9200
+  index_prefix: backup-dashboard
+  username: elasticsearch_username_TO_BE_FILLED
+  password: elasticsearch_password_TO_BE_FILLED
+  verify_certs: true
+
+collectors:
+  - name: i6000_core_rest
+    type: i6000
+    protocol: rest
+    enabled: true
+    schedule_second: 15
+    base_url: https://i6000_core_host_TO_BE_FILLED
+    username: i6000_core_username_TO_BE_FILLED
+    password: i6000_core_password_TO_BE_FILLED
+    verify_tls: true
+    endpoints: &i6000_endpoints
+      ping: aml/
+      physical_library: aml/physicalLibrary
+      status: aml/physicalLibrary/status
+      drives: aml/drives
+      media: aml/media?start=0&length=-1
+      segments_storage_used: aml/physicalLibrary/segments?type=storage&status=used&start=0&length=-1
+      segments_storage_available: aml/physicalLibrary/segments?type=storage&status=available&start=0&length=-1
+      towers: aml/devices/towers
+      ie_stations: aml/devices/ieStations
+      ras_status: aml/system/ras
+      ras_tickets: aml/system/ras/tickets
+
+  - name: i6000_chnl_rest
+    type: i6000
+    protocol: rest
+    enabled: true
+    schedule_second: 15
+    base_url: https://i6000_chnl_host_TO_BE_FILLED
+    username: i6000_chnl_username_TO_BE_FILLED
+    password: i6000_chnl_password_TO_BE_FILLED
+    verify_tls: true
+    endpoints: *i6000_endpoints
+
+  - name: i6000_info_rest
+    type: i6000
+    protocol: rest
+    enabled: true
+    schedule_second: 15
+    base_url: https://i6000_info_host_TO_BE_FILLED
+    username: i6000_info_username_TO_BE_FILLED
+    password: i6000_info_password_TO_BE_FILLED
+    verify_tls: true
+    endpoints: *i6000_endpoints
+
+  - name: i6000_ifrs_rest
+    type: i6000
+    protocol: rest
+    enabled: true
+    schedule_second: 15
+    base_url: https://i6000_ifrs_host_TO_BE_FILLED
+    username: i6000_ifrs_username_TO_BE_FILLED
+    password: i6000_ifrs_password_TO_BE_FILLED
+    verify_tls: true
+    endpoints: *i6000_endpoints

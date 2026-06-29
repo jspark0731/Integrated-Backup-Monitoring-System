@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-dashboard-collector-dd-config
+  labels:
+    app: backup-dashboard-collector
+    collector-group: dd
+data:
+  collector.yaml: |
+    app:
+      name: backup-dashboard-collector-dd
+      log_level: INFO
+    elasticsearch:
+      enabled: false
+      hosts:
+        - http://elasticsearch:9200
+      index_prefix: backup-dashboard
+      username: elasticsearch_username_TO_BE_FILLED
+      password: elasticsearch_password_TO_BE_FILLED
+      verify_certs: true
+    collectors:
+      - name: DD4500
+        type: DD
+        protocol: snmp
+        enabled: true
+        schedule_second: 0
+        host: DD4500_host_TO_BE_FILLED
+        port: 161
+        community: DD4500_community_TO_BE_FILLED
+        version: "2c"
+        oids:
+          capacity_total: DD4500_capacity_total_oid_TO_BE_FILLED
+          capacity_used: DD4500_capacity_used_oid_TO_BE_FILLED
+          health_status: DD4500_health_status_oid_TO_BE_FILLED
+      - name: DD6900_1
+        type: DD
+        protocol: snmp
+        enabled: true
+        schedule_second: 0
+        host: DD6900_1_host_TO_BE_FILLED
+        port: 161
+        community: DD6900_1_community_TO_BE_FILLED
+        version: "2c"
+        oids:
+          capacity_total: DD6900_1_capacity_total_oid_TO_BE_FILLED
+          capacity_used: DD6900_1_capacity_used_oid_TO_BE_FILLED
+          health_status: DD6900_1_health_status_oid_TO_BE_FILLED
+      - name: DD6900_2
+        type: DD
+        protocol: snmp
+        enabled: true
+        schedule_second: 0
+        host: DD6900_2_host_TO_BE_FILLED
+        port: 161
+        community: DD6900_2_community_TO_BE_FILLED
+        version: "2c"
+        oids:
+          capacity_total: DD6900_2_capacity_total_oid_TO_BE_FILLED
+          capacity_used: DD6900_2_capacity_used_oid_TO_BE_FILLED
+          health_status: DD6900_2_health_status_oid_TO_BE_FILLED
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-dashboard-collector-dd
+  labels:
+    app: backup-dashboard-collector
+    collector-group: dd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backup-dashboard-collector
+      collector-group: dd
+  template:
+    metadata:
+      labels:
+        app: backup-dashboard-collector
+        collector-group: dd
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: collector
+          image: backup-dashboard-collector-dd:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_CONFIG
+              value: /app/config/collector.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/collector.yaml
+              subPath: collector.yaml
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: backup-dashboard-collector-dd-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-dashboard-collector-dd
+  labels:
+    app: backup-dashboard-collector
+    collector-group: dd
+spec:
+  selector:
+    app: backup-dashboard-collector
+    collector-group: dd
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

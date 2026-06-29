@@ -1,0 +1,87 @@
+app:
+  name: backup-dashboard-collector-dxi
+  log_level: INFO
+
+elasticsearch:
+  enabled: false
+  hosts:
+    - http://elasticsearch:9200
+  index_prefix: backup-dashboard
+  username: elasticsearch_username_TO_BE_FILLED
+  password: elasticsearch_password_TO_BE_FILLED
+  verify_certs: true
+
+collectors:
+  - name: DXi_1
+    type: DXi
+    protocol: snmp
+    enabled: true
+    schedule_second: 0
+    host: DXi_1_host_TO_BE_FILLED
+    port: 161
+    community: DXi_1_community_TO_BE_FILLED
+    version: "2c"
+    oids:
+      device_name: 1.3.6.1.4.1.2036.2.1.1.1.0
+      assigned_name: 1.3.6.1.4.1.2036.2.1.1.2.0
+      location: 1.3.6.1.4.1.2036.2.1.1.3.0
+      vendor_id: 1.3.6.1.4.1.2036.2.1.1.4.0
+      product_id: 1.3.6.1.4.1.2036.2.1.1.5.0
+      product_revision: 1.3.6.1.4.1.2036.2.1.1.6.0
+      state: 1.3.6.1.4.1.2036.2.1.1.7.0
+      serial_number: 1.3.6.1.4.1.2036.2.1.1.12.0
+
+  - name: DXi_2
+    type: DXi
+    protocol: snmp
+    enabled: true
+    schedule_second: 0
+    host: DXi_2_host_TO_BE_FILLED
+    port: 161
+    community: DXi_2_community_TO_BE_FILLED
+    version: "2c"
+    oids:
+      device_name: 1.3.6.1.4.1.2036.2.1.1.1.0
+      assigned_name: 1.3.6.1.4.1.2036.2.1.1.2.0
+      location: 1.3.6.1.4.1.2036.2.1.1.3.0
+      vendor_id: 1.3.6.1.4.1.2036.2.1.1.4.0
+      product_id: 1.3.6.1.4.1.2036.2.1.1.5.0
+      product_revision: 1.3.6.1.4.1.2036.2.1.1.6.0
+      state: 1.3.6.1.4.1.2036.2.1.1.7.0
+      serial_number: 1.3.6.1.4.1.2036.2.1.1.12.0
+
+  - name: DXi_1_cli
+    type: DXi
+    protocol: ssh
+    enabled: true
+    schedule_second: 0
+    host: DXi_1_host_TO_BE_FILLED
+    port: 22
+    username: DXi_1_username_TO_BE_FILLED
+    password: DXi_1_password_TO_BE_FILLED
+    command_timeout: 30
+    commands:
+      status: "show status"
+      capacity: "show capacity"
+      dedup: "show dedup"
+      replication: "show replication"
+      interfaces: "show network"
+      alerts: "show alerts"
+
+  - name: DXi_2_cli
+    type: DXi
+    protocol: ssh
+    enabled: true
+    schedule_second: 0
+    host: DXi_2_host_TO_BE_FILLED
+    port: 22
+    username: DXi_2_username_TO_BE_FILLED
+    password: DXi_2_password_TO_BE_FILLED
+    command_timeout: 30
+    commands:
+      status: "show status"
+      capacity: "show capacity"
+      dedup: "show dedup"
+      replication: "show replication"
+      interfaces: "show network"
+      alerts: "show alerts"

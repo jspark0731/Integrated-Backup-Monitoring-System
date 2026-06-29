@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-dashboard-collector-zfs-config
+  labels:
+    app: backup-dashboard-collector
+    collector-group: zfs
+data:
+  collector.yaml: |
+    app:
+      name: backup-dashboard-collector-zfs
+      log_level: INFO
+    elasticsearch:
+      enabled: false
+      hosts:
+        - http://elasticsearch:9200
+      index_prefix: backup-dashboard
+      username: elasticsearch_username_TO_BE_FILLED
+      password: elasticsearch_password_TO_BE_FILLED
+      verify_certs: true
+    collectors:
+      - name: ZFS_1
+        type: ZFS
+        protocol: rest
+        enabled: true
+        schedule_second: 45
+        base_url: ZFS_1_base_url_TO_BE_FILLED
+        endpoint: ZFS_1_endpoint_TO_BE_FILLED
+        method: GET
+        token: ZFS_1_token_TO_BE_FILLED
+        username: ZFS_1_username_TO_BE_FILLED
+        password: ZFS_1_password_TO_BE_FILLED
+        verify_tls: true
+      - name: ZFS_2
+        type: ZFS
+        protocol: rest
+        enabled: true
+        schedule_second: 45
+        base_url: ZFS_2_base_url_TO_BE_FILLED
+        endpoint: ZFS_2_endpoint_TO_BE_FILLED
+        method: GET
+        token: ZFS_2_token_TO_BE_FILLED
+        username: ZFS_2_username_TO_BE_FILLED
+        password: ZFS_2_password_TO_BE_FILLED
+        verify_tls: true
+      - name: ZFS_3
+        type: ZFS
+        protocol: rest
+        enabled: true
+        schedule_second: 45
+        base_url: ZFS_3_base_url_TO_BE_FILLED
+        endpoint: ZFS_3_endpoint_TO_BE_FILLED
+        method: GET
+        token: ZFS_3_token_TO_BE_FILLED
+        username: ZFS_3_username_TO_BE_FILLED
+        password: ZFS_3_password_TO_BE_FILLED
+        verify_tls: true
+      - name: ZFS_4
+        type: ZFS
+        protocol: rest
+        enabled: true
+        schedule_second: 45
+        base_url: ZFS_4_base_url_TO_BE_FILLED
+        endpoint: ZFS_4_endpoint_TO_BE_FILLED
+        method: GET
+        token: ZFS_4_token_TO_BE_FILLED
+        username: ZFS_4_username_TO_BE_FILLED
+        password: ZFS_4_password_TO_BE_FILLED
+        verify_tls: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-dashboard-collector-zfs
+  labels:
+    app: backup-dashboard-collector
+    collector-group: zfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backup-dashboard-collector
+      collector-group: zfs
+  template:
+    metadata:
+      labels:
+        app: backup-dashboard-collector
+        collector-group: zfs
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: collector
+          image: backup-dashboard-collector-zfs:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_CONFIG
+              value: /app/config/collector.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/collector.yaml
+              subPath: collector.yaml
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: backup-dashboard-collector-zfs-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-dashboard-collector-zfs
+  labels:
+    app: backup-dashboard-collector
+    collector-group: zfs
+spec:
+  selector:
+    app: backup-dashboard-collector
+    collector-group: zfs
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

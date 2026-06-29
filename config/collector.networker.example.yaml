@@ -1,0 +1,65 @@
+app:
+  name: backup-dashboard-collector-networker
+  log_level: INFO
+
+elasticsearch:
+  enabled: false
+  hosts:
+    - http://elasticsearch:9200
+  index_prefix: backup-dashboard
+  username: elasticsearch_username_TO_BE_FILLED
+  password: elasticsearch_password_TO_BE_FILLED
+  verify_certs: true
+
+collectors:
+  - name: networker_core
+    type: Networker
+    protocol: rest
+    enabled: true
+    schedule_second: 30
+    base_url: networker_core_base_url_TO_BE_FILLED
+    endpoint: networker_core_endpoint_TO_BE_FILLED
+    method: GET
+    token: networker_core_token_TO_BE_FILLED
+    username: networker_core_username_TO_BE_FILLED
+    password: networker_core_password_TO_BE_FILLED
+    verify_tls: true
+
+  - name: networker_chnl
+    type: Networker
+    protocol: rest
+    enabled: true
+    schedule_second: 30
+    base_url: networker_chnl_base_url_TO_BE_FILLED
+    endpoint: networker_chnl_endpoint_TO_BE_FILLED
+    method: GET
+    token: networker_chnl_token_TO_BE_FILLED
+    username: networker_chnl_username_TO_BE_FILLED
+    password: networker_chnl_password_TO_BE_FILLED
+    verify_tls: true
+
+  - name: networker_info
+    type: Networker
+    protocol: rest
+    enabled: true
+    schedule_second: 30
+    base_url: networker_info_base_url_TO_BE_FILLED
+    endpoint: networker_info_endpoint_TO_BE_FILLED
+    method: GET
+    token: networker_info_token_TO_BE_FILLED
+    username: networker_info_username_TO_BE_FILLED
+    password: networker_info_password_TO_BE_FILLED
+    verify_tls: true
+
+  - name: networker_ifrs
+    type: Networker
+    protocol: rest
+    enabled: true
+    schedule_second: 30
+    base_url: networker_ifrs_base_url_TO_BE_FILLED
+    endpoint: networker_ifrs_endpoint_TO_BE_FILLED
+    method: GET
+    token: networker_ifrs_token_TO_BE_FILLED
+    username: networker_ifrs_username_TO_BE_FILLED
+    password: networker_ifrs_password_TO_BE_FILLED
+    verify_tls: true

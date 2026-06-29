@@ -1,0 +1,55 @@
+app:
+  name: backup-dashboard-collector-dd
+  log_level: INFO
+
+elasticsearch:
+  enabled: false
+  hosts:
+    - http://elasticsearch:9200
+  index_prefix: backup-dashboard
+  username: elasticsearch_username_TO_BE_FILLED
+  password: elasticsearch_password_TO_BE_FILLED
+  verify_certs: true
+
+collectors:
+  - name: DD4500
+    type: DD
+    protocol: snmp
+    enabled: true
+    schedule_second: 0
+    host: DD4500_host_TO_BE_FILLED
+    port: 161
+    community: DD4500_community_TO_BE_FILLED
+    version: "2c"
+    oids:
+      capacity_total: DD4500_capacity_total_oid_TO_BE_FILLED
+      capacity_used: DD4500_capacity_used_oid_TO_BE_FILLED
+      health_status: DD4500_health_status_oid_TO_BE_FILLED
+
+  - name: DD6900_1
+    type: DD
+    protocol: snmp
+    enabled: true
+    schedule_second: 0
+    host: DD6900_1_host_TO_BE_FILLED
+    port: 161
+    community: DD6900_1_community_TO_BE_FILLED
+    version: "2c"
+    oids:
+      capacity_total: DD6900_1_capacity_total_oid_TO_BE_FILLED
+      capacity_used: DD6900_1_capacity_used_oid_TO_BE_FILLED
+      health_status: DD6900_1_health_status_oid_TO_BE_FILLED
+
+  - name: DD6900_2
+    type: DD
+    protocol: snmp
+    enabled: true
+    schedule_second: 0
+    host: DD6900_2_host_TO_BE_FILLED
+    port: 161
+    community: DD6900_2_community_TO_BE_FILLED
+    version: "2c"
+    oids:
+      capacity_total: DD6900_2_capacity_total_oid_TO_BE_FILLED
+      capacity_used: DD6900_2_capacity_used_oid_TO_BE_FILLED
+      health_status: DD6900_2_health_status_oid_TO_BE_FILLED

@@ -1,0 +1,203 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-dashboard-collector-dxi-config
+  labels:
+    app: backup-dashboard-collector
+    collector-group: dxi
+data:
+  collector.yaml: |
+    app:
+      name: backup-dashboard-collector-dxi
+      log_level: INFO
+    elasticsearch:
+      enabled: false
+      hosts:
+        - http://elasticsearch:9200
+      index_prefix: backup-dashboard
+      username_file: /app/secrets/elasticsearch/username
+      password_file: /app/secrets/elasticsearch/password
+      verify_certs: true
+    collectors:
+      - name: DXi_1
+        type: DXi
+        protocol: snmp
+        enabled: true
+        schedule_second: 0
+        host: DXi_1_host_TO_BE_FILLED
+        port: 161
+        community: DXi_1_community_TO_BE_FILLED
+        version: "2c"
+        oids:
+          device_name: 1.3.6.1.4.1.2036.2.1.1.1.0
+          assigned_name: 1.3.6.1.4.1.2036.2.1.1.2.0
+          location: 1.3.6.1.4.1.2036.2.1.1.3.0
+          vendor_id: 1.3.6.1.4.1.2036.2.1.1.4.0
+          product_id: 1.3.6.1.4.1.2036.2.1.1.5.0
+          product_revision: 1.3.6.1.4.1.2036.2.1.1.6.0
+          state: 1.3.6.1.4.1.2036.2.1.1.7.0
+          serial_number: 1.3.6.1.4.1.2036.2.1.1.12.0
+      - name: DXi_2
+        type: DXi
+        protocol: snmp
+        enabled: true
+        schedule_second: 0
+        host: DXi_2_host_TO_BE_FILLED
+        port: 161
+        community: DXi_2_community_TO_BE_FILLED
+        version: "2c"
+        oids:
+          device_name: 1.3.6.1.4.1.2036.2.1.1.1.0
+          assigned_name: 1.3.6.1.4.1.2036.2.1.1.2.0
+          location: 1.3.6.1.4.1.2036.2.1.1.3.0
+          vendor_id: 1.3.6.1.4.1.2036.2.1.1.4.0
+          product_id: 1.3.6.1.4.1.2036.2.1.1.5.0
+          product_revision: 1.3.6.1.4.1.2036.2.1.1.6.0
+          state: 1.3.6.1.4.1.2036.2.1.1.7.0
+          serial_number: 1.3.6.1.4.1.2036.2.1.1.12.0
+      - name: DXi_1_cli
+        type: DXi
+        protocol: ssh
+        enabled: true
+        schedule_second: 0
+        host: DXi_1_host_TO_BE_FILLED
+        port: 22
+        username_file: /app/secrets/dxi/dxi-1-username
+        password_file: /app/secrets/dxi/dxi-1-password
+        command_timeout: 30
+        commands:
+          status: "show status"
+          capacity: "show capacity"
+          dedup: "show dedup"
+          replication: "show replication"
+          interfaces: "show network"
+          alerts: "show alerts"
+      - name: DXi_2_cli
+        type: DXi
+        protocol: ssh
+        enabled: true
+        schedule_second: 0
+        host: DXi_2_host_TO_BE_FILLED
+        port: 22
+        username_file: /app/secrets/dxi/dxi-2-username
+        password_file: /app/secrets/dxi/dxi-2-password
+        command_timeout: 30
+        commands:
+          status: "show status"
+          capacity: "show capacity"
+          dedup: "show dedup"
+          replication: "show replication"
+          interfaces: "show network"
+          alerts: "show alerts"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-dashboard-collector-dxi
+  labels:
+    app: backup-dashboard-collector
+    collector-group: dxi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backup-dashboard-collector
+      collector-group: dxi
+  template:
+    metadata:
+      labels:
+        app: backup-dashboard-collector
+        collector-group: dxi
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: collector
+          image: backup-dashboard-collector-dxi:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_CONFIG
+              value: /app/config/collector.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/collector.yaml
+              subPath: collector.yaml
+            - name: secrets
+              mountPath: /app/secrets
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: backup-dashboard-collector-dxi-config
+        - name: secrets
+          secret:
+            secretName: backup-dashboard-collector-dxi-secrets
+            items:
+              - key: elasticsearch-username
+                path: elasticsearch/username
+              - key: elasticsearch-password
+                path: elasticsearch/password
+              - key: dxi-1-username
+                path: dxi/dxi-1-username
+              - key: dxi-1-password
+                path: dxi/dxi-1-password
+              - key: dxi-2-username
+                path: dxi/dxi-2-username
+              - key: dxi-2-password
+                path: dxi/dxi-2-password
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backup-dashboard-collector-dxi-secrets
+  labels:
+    app: backup-dashboard-collector
+    collector-group: dxi
+type: Opaque
+stringData:
+  elasticsearch-username: elasticsearch_username_TO_BE_FILLED
+  elasticsearch-password: elasticsearch_password_TO_BE_FILLED
+  dxi-1-username: DXi_1_username_TO_BE_FILLED
+  dxi-1-password: DXi_1_password_TO_BE_FILLED
+  dxi-2-username: DXi_2_username_TO_BE_FILLED
+  dxi-2-password: DXi_2_password_TO_BE_FILLED
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-dashboard-collector-dxi
+  labels:
+    app: backup-dashboard-collector
+    collector-group: dxi
+spec:
+  selector:
+    app: backup-dashboard-collector
+    collector-group: dxi
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -1,0 +1,65 @@
+app:
+  name: backup-dashboard-collector-zfs
+  log_level: INFO
+
+elasticsearch:
+  enabled: false
+  hosts:
+    - http://elasticsearch:9200
+  index_prefix: backup-dashboard
+  username: elasticsearch_username_TO_BE_FILLED
+  password: elasticsearch_password_TO_BE_FILLED
+  verify_certs: true
+
+collectors:
+  - name: ZFS_1
+    type: ZFS
+    protocol: rest
+    enabled: true
+    schedule_second: 45
+    base_url: ZFS_1_base_url_TO_BE_FILLED
+    endpoint: ZFS_1_endpoint_TO_BE_FILLED
+    method: GET
+    token: ZFS_1_token_TO_BE_FILLED
+    username: ZFS_1_username_TO_BE_FILLED
+    password: ZFS_1_password_TO_BE_FILLED
+    verify_tls: true
+
+  - name: ZFS_2
+    type: ZFS
+    protocol: rest
+    enabled: true
+    schedule_second: 45
+    base_url: ZFS_2_base_url_TO_BE_FILLED
+    endpoint: ZFS_2_endpoint_TO_BE_FILLED
+    method: GET
+    token: ZFS_2_token_TO_BE_FILLED
+    username: ZFS_2_username_TO_BE_FILLED
+    password: ZFS_2_password_TO_BE_FILLED
+    verify_tls: true
+
+  - name: ZFS_3
+    type: ZFS
+    protocol: rest
+    enabled: true
+    schedule_second: 45
+    base_url: ZFS_3_base_url_TO_BE_FILLED
+    endpoint: ZFS_3_endpoint_TO_BE_FILLED
+    method: GET
+    token: ZFS_3_token_TO_BE_FILLED
+    username: ZFS_3_username_TO_BE_FILLED
+    password: ZFS_3_password_TO_BE_FILLED
+    verify_tls: true
+
+  - name: ZFS_4
+    type: ZFS
+    protocol: rest
+    enabled: true
+    schedule_second: 45
+    base_url: ZFS_4_base_url_TO_BE_FILLED
+    endpoint: ZFS_4_endpoint_TO_BE_FILLED
+    method: GET
+    token: ZFS_4_token_TO_BE_FILLED
+    username: ZFS_4_username_TO_BE_FILLED
+    password: ZFS_4_password_TO_BE_FILLED
+    verify_tls: true

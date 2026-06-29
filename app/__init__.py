@@ -1,0 +1,2 @@
+"""Backup dashboard collector application."""
+
