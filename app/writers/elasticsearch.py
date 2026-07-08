@@ -58,6 +58,31 @@ class ElasticsearchWriter:
                 }
                 for document_type in ("status", "drive", "media")
             ]
+        if result.target_type == "Networker" and result.protocol == "rest":
+            actions = []
+            for document_type, payload_key in (
+                ("job", "jobs"),
+                ("client", "clients"),
+                ("policy", "policies"),
+                ("workflow", "workflows"),
+                ("monthly-report", "monthly_report"),
+            ):
+                records = result.payload.get(payload_key) if result.payload else None
+                if not isinstance(records, list):
+                    continue
+                for record in records:
+                    actions.append(
+                        {
+                            "_index": self._index_name(result, document_type),
+                            "_source": result.to_document()
+                            | {
+                                "document_type": document_type,
+                                "payload": record,
+                            },
+                        }
+                    )
+            if actions:
+                return actions
         return [
             {
                 "_index": self._index_name(result),
@@ -77,6 +102,12 @@ class ElasticsearchWriter:
             if result.protocol == "rest" and document_type:
                 return f"backup-i6000-{document_type}-{month_suffix}"
             return f"backup-i6000-status-{month_suffix}"
+
+        if result and result.target_type == "Networker":
+            month_suffix = datetime.now(timezone.utc).strftime("%Y.%m")
+            if result.protocol == "rest" and document_type:
+                return f"backup-networker-{document_type}-{month_suffix}"
+            return f"backup-networker-status-{month_suffix}"
 
         date_suffix = datetime.now(timezone.utc).strftime("%Y.%m.%d")
         return f"{self.config.index_prefix}-{date_suffix}"

@@ -13,6 +13,10 @@ def build_collector(config: CollectorConfig) -> BaseCollector:
         from app.collectors.i6000_rest import I6000RestCollector
 
         return I6000RestCollector(config)
+    if config.protocol == "rest" and config.type == "Networker":
+        from app.collectors.networker_rest import NetworkerRestCollector
+
+        return NetworkerRestCollector(config)
     if config.protocol == "rest":
         from app.collectors.rest import RestCollector
 

@@ -121,3 +121,39 @@ TAPE_MEDIA_COUNT = Gauge(
     "Known tape media count",
     ["device_name"],
 )
+
+NETWORKER_API_UP = Gauge(
+    "backup_networker_api_up",
+    "NetWorker REST API reachability, 1 means reachable",
+    ["server"],
+)
+
+NETWORKER_JOB_SUCCESS_COUNT = Gauge(
+    "backup_networker_job_success_count",
+    "NetWorker successful job count by policy",
+    ["server", "policy"],
+)
+
+NETWORKER_JOB_FAILED_COUNT = Gauge(
+    "backup_networker_job_failed_count",
+    "NetWorker failed job count by policy",
+    ["server", "policy"],
+)
+
+NETWORKER_JOB_RUNNING_COUNT = Gauge(
+    "backup_networker_job_running_count",
+    "NetWorker running job count by policy",
+    ["server", "policy"],
+)
+
+NETWORKER_WORKFLOW_COUNT = Gauge(
+    "backup_networker_workflow_count",
+    "NetWorker workflow count by policy",
+    ["server", "policy"],
+)
+
+NETWORKER_CLIENT_COUNT = Gauge(
+    "backup_networker_client_count",
+    "NetWorker unique client count",
+    ["server"],
+)

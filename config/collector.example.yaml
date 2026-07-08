@@ -222,7 +222,6 @@ collectors:
     enabled: true
     schedule_second: 30
     base_url: networker_core_base_url_TO_BE_FILLED
-    endpoint: networker_core_endpoint_TO_BE_FILLED
     method: GET
     token: networker_core_token_TO_BE_FILLED
     username: networker_core_username_TO_BE_FILLED
@@ -235,7 +234,6 @@ collectors:
     enabled: true
     schedule_second: 30
     base_url: networker_chnl_base_url_TO_BE_FILLED
-    endpoint: networker_chnl_endpoint_TO_BE_FILLED
     method: GET
     token: networker_chnl_token_TO_BE_FILLED
     username: networker_chnl_username_TO_BE_FILLED
@@ -248,7 +246,6 @@ collectors:
     enabled: true
     schedule_second: 30
     base_url: networker_info_base_url_TO_BE_FILLED
-    endpoint: networker_info_endpoint_TO_BE_FILLED
     method: GET
     token: networker_info_token_TO_BE_FILLED
     username: networker_info_username_TO_BE_FILLED
@@ -261,7 +258,6 @@ collectors:
     enabled: true
     schedule_second: 30
     base_url: networker_ifrs_base_url_TO_BE_FILLED
-    endpoint: networker_ifrs_endpoint_TO_BE_FILLED
     method: GET
     token: networker_ifrs_token_TO_BE_FILLED
     username: networker_ifrs_username_TO_BE_FILLED

@@ -3,6 +3,7 @@ import pytest
 from app.collectors.factory import build_collector
 from app.collectors.dxi_cli import DxiCliCollector, parse_dxi_cli_outputs
 from app.collectors.i6000_rest import I6000RestCollector, parse_i6000_rest_payload
+from app.collectors.networker_rest import NetworkerRestCollector, parse_networker_rest_payload
 from app.core.config import CollectorConfig
 
 
@@ -80,6 +81,24 @@ def test_i6000_rest_collector_accepts_endpoint_map() -> None:
     )
 
     assert isinstance(collector, I6000RestCollector)
+    assert collector.config.skip_reason is None
+
+
+def test_networker_rest_collector_uses_default_endpoint_map() -> None:
+    collector = build_collector(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            schedule_second=30,
+            base_url="https://networker.example.com:9090",
+            username="administrator",
+            password="secret",
+        )
+    )
+
+    assert isinstance(collector, NetworkerRestCollector)
     assert collector.config.skip_reason is None
 
 
@@ -172,6 +191,104 @@ def test_i6000_rest_parser_extracts_tape_summary_values() -> None:
     assert summary["library_main_door_open"] is True
     assert summary["ie_stations"][0]["lock"] == 1
     assert summary["ras_ticket_counts"]["warning"] == 1
+
+
+def test_networker_rest_parser_extracts_backup_summary_values() -> None:
+    parsed = parse_networker_rest_payload(
+        {
+            "jobs": {
+                "jobs": [
+                    {
+                        "id": 1,
+                        "name": "Filesystem",
+                        "type": "backup",
+                        "state": "Completed",
+                        "exitCode": 0,
+                        "runOnHost": "client01",
+                    },
+                    {
+                        "id": 2,
+                        "name": "Filesystem",
+                        "type": "backup",
+                        "state": "Completed",
+                        "exitCode": 1,
+                        "runOnHost": "client02",
+                    },
+                    {
+                        "id": 3,
+                        "name": "Database",
+                        "type": "backup",
+                        "state": "Running",
+                        "runOnHost": "db01",
+                    },
+                ]
+            },
+            "clients": {
+                "clients": [
+                    {
+                        "clientId": "client-1",
+                        "hostname": "client01",
+                        "operatingSystem": "Linux",
+                        "backupType": "Filesystem",
+                        "saveSets": ["All"],
+                        "protectionGroups": ["Bronze-Filesystem"],
+                    },
+                    {
+                        "clientId": "client-2",
+                        "hostname": "db01",
+                        "operatingSystem": "Windows Server",
+                        "backupType": "Database",
+                    },
+                ]
+            },
+            "policies": {
+                "protectionPolicies": [
+                    {
+                        "name": "Bronze",
+                        "workflows": [
+                            {
+                                "name": "Filesystem",
+                                "enabled": True,
+                                "actions": [{"name": "Backup"}],
+                                "protectionGroups": ["Bronze-Filesystem"],
+                            },
+                            {
+                                "name": "Database",
+                                "enabled": True,
+                                "actions": [{"name": "Backup"}],
+                            },
+                        ],
+                    }
+                ]
+            },
+            "backups": {
+                "backups": [
+                    {
+                        "id": "backup-1",
+                        "clientHostname": "client01",
+                        "name": "C:\\data",
+                        "level": "Full",
+                        "size": {"unit": "Byte", "value": 1000},
+                        "attributes": [
+                            {"key": "*policy name", "values": ["Bronze: 1539851250"]},
+                            {"key": "*policy workflow name", "values": ["Filesystem: 1539851250"]},
+                        ],
+                    }
+                ]
+            },
+        },
+        server_name="networker_core",
+    )
+
+    assert parsed["summary"]["client_count"] == 2
+    assert parsed["summary"]["workflow_count"] == 2
+    assert parsed["summary"]["total_backup_bytes"] == 1000
+    assert parsed["summary"]["job_success_count_by_policy"]["Filesystem"] == 1
+    assert parsed["summary"]["job_failed_count_by_policy"]["Filesystem"] == 1
+    assert parsed["summary"]["job_running_count_by_policy"]["Database"] == 1
+    assert parsed["clients"][1]["client_os_family"] == "Windows"
+    assert parsed["workflows"][0]["action_count"] == 1
+    assert parsed["monthly_report"][0]["client_count"] == 2
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,8 @@ The project builds one collector codebase into five target-specific images:
 - DXi SSH: capacity, deduplication, replication, interface, and alert data from CLI output
 - DD SNMP: placeholder configuration
 - i6000 REST: library, RAS subsystem, partition, drive, door, slot, and media status from the Scalar Web Services API
-- Networker/ZFS REST: placeholder configuration
+- Networker REST: job, client, protection policy, workflow, backup, and monthly summary data from the NetWorker REST API
+- ZFS REST: placeholder configuration
 
 Collectors with `TO_BE_FILLED` settings are skipped safely and logged.
 
@@ -87,6 +88,14 @@ i6000 collection uses the Scalar i6000 RESTful Web Services API only. This
 keeps the operational setup to one access method while covering the former SNMP
 status values and the richer slot/media data. See [i6000 REST Collection](docs/i6000_rest_collection.md).
 
+## NetWorker REST Collection
+
+NetWorker collection uses the REST API under `/nwrestapi/v3/global` by default.
+It gathers jobs, clients, backups, protection policies, and protection groups,
+then writes normalized job/client/policy/workflow/monthly report documents.
+Configure `base_url` as the NetWorker server root, for example
+`https://networker.example.com:9090`.
+
 ## Endpoints
 
 - `GET /healthz`
@@ -99,4 +108,5 @@ status values and the richer slot/media data. See [i6000 REST Collection](docs/i
 
 Elasticsearch receives the full collection document, including raw payloads.
 Prometheus receives collector health metrics plus normalized DXi and i6000
-gauges when the collectors can extract those values.
+gauges when the collectors can extract those values. NetWorker also publishes
+API reachability, job counts by policy, workflow counts, and client count.

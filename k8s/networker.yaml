@@ -25,7 +25,6 @@ data:
         enabled: true
         schedule_second: 30
         base_url: networker_core_base_url_TO_BE_FILLED
-        endpoint: networker_core_endpoint_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/networker/networker-core-token
         username_file: /app/secrets/networker/networker-core-username
@@ -37,7 +36,6 @@ data:
         enabled: true
         schedule_second: 30
         base_url: networker_chnl_base_url_TO_BE_FILLED
-        endpoint: networker_chnl_endpoint_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/networker/networker-chnl-token
         username_file: /app/secrets/networker/networker-chnl-username
@@ -49,7 +47,6 @@ data:
         enabled: true
         schedule_second: 30
         base_url: networker_info_base_url_TO_BE_FILLED
-        endpoint: networker_info_endpoint_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/networker/networker-info-token
         username_file: /app/secrets/networker/networker-info-username
@@ -61,7 +58,6 @@ data:
         enabled: true
         schedule_second: 30
         base_url: networker_ifrs_base_url_TO_BE_FILLED
-        endpoint: networker_ifrs_endpoint_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/networker/networker-ifrs-token
         username_file: /app/secrets/networker/networker-ifrs-username

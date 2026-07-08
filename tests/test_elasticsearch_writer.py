@@ -47,3 +47,30 @@ def test_i6000_rest_results_expand_to_status_drive_media_indexes() -> None:
     assert actions[0]["_index"].startswith("backup-i6000-status-")
     assert actions[1]["_index"].startswith("backup-i6000-drive-")
     assert actions[2]["_index"].startswith("backup-i6000-media-")
+
+
+def test_networker_rest_results_expand_to_domain_indexes() -> None:
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+    result = CollectionResult(
+        collector="networker_core",
+        target_type="Networker",
+        protocol="rest",
+        collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
+        ok=True,
+        payload={
+            "jobs": [{"job_id": 1}],
+            "clients": [{"client_name": "client01"}],
+            "policies": [{"policy_name": "Bronze"}],
+            "workflows": [{"workflow_name": "Filesystem"}],
+            "monthly_report": [{"policy_name": "Bronze"}],
+        },
+    )
+
+    actions = writer._actions_for_result(result)
+
+    assert len(actions) == 5
+    assert actions[0]["_index"].startswith("backup-networker-job-")
+    assert actions[1]["_index"].startswith("backup-networker-client-")
+    assert actions[2]["_index"].startswith("backup-networker-policy-")
+    assert actions[3]["_index"].startswith("backup-networker-workflow-")
+    assert actions[4]["_index"].startswith("backup-networker-monthly-report-")

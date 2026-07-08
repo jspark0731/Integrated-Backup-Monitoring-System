@@ -88,11 +88,14 @@ class CollectorConfig:
                     "endpoints": self.endpoints,
                 }
             )
+        elif self.type == "Networker":
+            if self.endpoints:
+                required["endpoints"] = self.endpoints
         else:
             required["endpoint"] = self.endpoint
         if has_unfilled_values(required):
             return "REST config contains TO_BE_FILLED values"
-        if not self.endpoint and not self.endpoints:
+        if self.type != "Networker" and not self.endpoint and not self.endpoints:
             return "REST endpoint list is empty"
         return None
 
