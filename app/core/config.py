@@ -91,11 +91,16 @@ class CollectorConfig:
         elif self.type == "Networker":
             if self.endpoints:
                 required["endpoints"] = self.endpoints
+        elif self.type == "ZFS":
+            if self.endpoints:
+                required["endpoints"] = self.endpoints
+            if not self.token and not (self.username and self.password):
+                return "REST config requires token or username/password"
         else:
             required["endpoint"] = self.endpoint
         if has_unfilled_values(required):
             return "REST config contains TO_BE_FILLED values"
-        if self.type != "Networker" and not self.endpoint and not self.endpoints:
+        if self.type not in {"Networker", "ZFS"} and not self.endpoint and not self.endpoints:
             return "REST endpoint list is empty"
         return None
 

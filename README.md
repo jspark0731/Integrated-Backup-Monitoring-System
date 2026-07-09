@@ -17,7 +17,7 @@ The project builds one collector codebase into five target-specific images:
 - DD SNMP: placeholder configuration
 - i6000 REST: library, RAS subsystem, partition, drive, door, slot, and media status from the Scalar Web Services API
 - Networker REST: job, client, protection policy, workflow, backup, and monthly summary data from the NetWorker REST API
-- ZFS REST: placeholder configuration
+- ZFS REST: appliance version, pool capacity, project, filesystem, LUN, alert, and fault data from the Oracle ZFS Storage Appliance REST API
 
 Collectors with `TO_BE_FILLED` settings are skipped safely and logged.
 
@@ -96,6 +96,13 @@ then writes normalized job/client/policy/workflow/monthly report documents.
 Configure `base_url` as the NetWorker server root, for example
 `https://networker.example.com:9090`.
 
+## ZFS REST Collection
+
+ZFS collection uses the Oracle ZFS Storage Appliance REST API under `/api` by
+default. Configure `base_url` as the appliance root, for example
+`https://zfs-storage.example.com:215`. The collector gathers appliance version,
+pools, pool details, projects, filesystems, LUNs, alert logs, and fault logs.
+
 ## Endpoints
 
 - `GET /healthz`
@@ -109,4 +116,6 @@ Configure `base_url` as the NetWorker server root, for example
 Elasticsearch receives the full collection document, including raw payloads.
 Prometheus receives collector health metrics plus normalized DXi and i6000
 gauges when the collectors can extract those values. NetWorker also publishes
-API reachability, job counts by policy, workflow counts, and client count.
+API reachability, job counts by policy, workflow counts, and client count. ZFS
+publishes API reachability, pool status, pool used capacity percent, and
+alert/fault counts.

@@ -83,6 +83,40 @@ class ElasticsearchWriter:
                     )
             if actions:
                 return actions
+        if result.target_type == "ZFS" and result.protocol == "rest":
+            actions = []
+            summary = result.payload.get("summary") if result.payload else None
+            if isinstance(summary, dict):
+                actions.append(
+                    {
+                        "_index": self._index_name(result, "summary"),
+                        "_source": result.to_document()
+                        | {
+                            "document_type": "summary",
+                            "payload": summary,
+                        },
+                    }
+                )
+            for document_type, payload_key in (
+                ("pool", "pools"),
+                ("status", "alerts"),
+            ):
+                records = result.payload.get(payload_key) if result.payload else None
+                if not isinstance(records, list):
+                    continue
+                for record in records:
+                    actions.append(
+                        {
+                            "_index": self._index_name(result, document_type),
+                            "_source": result.to_document()
+                            | {
+                                "document_type": document_type,
+                                "payload": record,
+                            },
+                        }
+                    )
+            if actions:
+                return actions
         return [
             {
                 "_index": self._index_name(result),
@@ -108,6 +142,12 @@ class ElasticsearchWriter:
             if result.protocol == "rest" and document_type:
                 return f"backup-networker-{document_type}-{month_suffix}"
             return f"backup-networker-status-{month_suffix}"
+
+        if result and result.target_type == "ZFS":
+            month_suffix = datetime.now(timezone.utc).strftime("%Y.%m")
+            if result.protocol == "rest" and document_type:
+                return f"backup-zfs-{document_type}-{month_suffix}"
+            return f"backup-zfs-status-{month_suffix}"
 
         date_suffix = datetime.now(timezone.utc).strftime("%Y.%m.%d")
         return f"{self.config.index_prefix}-{date_suffix}"

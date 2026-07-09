@@ -17,6 +17,10 @@ def build_collector(config: CollectorConfig) -> BaseCollector:
         from app.collectors.networker_rest import NetworkerRestCollector
 
         return NetworkerRestCollector(config)
+    if config.protocol == "rest" and config.type == "ZFS":
+        from app.collectors.zfs_rest import ZfsRestCollector
+
+        return ZfsRestCollector(config)
     if config.protocol == "rest":
         from app.collectors.rest import RestCollector
 

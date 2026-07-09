@@ -25,7 +25,6 @@ data:
         enabled: true
         schedule_second: 45
         base_url: ZFS_1_base_url_TO_BE_FILLED
-        endpoint: ZFS_1_endpoint_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/zfs/zfs-1-token
         username_file: /app/secrets/zfs/zfs-1-username
@@ -37,7 +36,6 @@ data:
         enabled: true
         schedule_second: 45
         base_url: ZFS_2_base_url_TO_BE_FILLED
-        endpoint: ZFS_2_endpoint_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/zfs/zfs-2-token
         username_file: /app/secrets/zfs/zfs-2-username
@@ -49,7 +47,6 @@ data:
         enabled: true
         schedule_second: 45
         base_url: ZFS_3_base_url_TO_BE_FILLED
-        endpoint: ZFS_3_endpoint_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/zfs/zfs-3-token
         username_file: /app/secrets/zfs/zfs-3-username
@@ -61,7 +58,6 @@ data:
         enabled: true
         schedule_second: 45
         base_url: ZFS_4_base_url_TO_BE_FILLED
-        endpoint: ZFS_4_endpoint_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/zfs/zfs-4-token
         username_file: /app/secrets/zfs/zfs-4-username

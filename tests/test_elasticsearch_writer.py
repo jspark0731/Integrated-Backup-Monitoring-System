@@ -74,3 +74,26 @@ def test_networker_rest_results_expand_to_domain_indexes() -> None:
     assert actions[2]["_index"].startswith("backup-networker-policy-")
     assert actions[3]["_index"].startswith("backup-networker-workflow-")
     assert actions[4]["_index"].startswith("backup-networker-monthly-report-")
+
+
+def test_zfs_rest_results_expand_to_domain_indexes() -> None:
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+    result = CollectionResult(
+        collector="ZFS_1",
+        target_type="ZFS",
+        protocol="rest",
+        collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
+        ok=True,
+        payload={
+            "summary": {"device_name": "zfs-prod-1"},
+            "pools": [{"name": "p1"}],
+            "alerts": [{"summary": "Disk fault"}],
+        },
+    )
+
+    actions = writer._actions_for_result(result)
+
+    assert len(actions) == 3
+    assert actions[0]["_index"].startswith("backup-zfs-summary-")
+    assert actions[1]["_index"].startswith("backup-zfs-pool-")
+    assert actions[2]["_index"].startswith("backup-zfs-status-")

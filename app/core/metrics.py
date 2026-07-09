@@ -157,3 +157,27 @@ NETWORKER_CLIENT_COUNT = Gauge(
     "NetWorker unique client count",
     ["server"],
 )
+
+ZFS_API_UP = Gauge(
+    "backup_zfs_api_up",
+    "ZFS REST API reachability, 1 means reachable",
+    ["device_name"],
+)
+
+ZFS_POOL_STATUS = Gauge(
+    "backup_zfs_pool_status",
+    "ZFS pool status, 1 means online",
+    ["device_name", "pool"],
+)
+
+ZFS_CAPACITY_USED_PERCENT = Gauge(
+    "backup_zfs_capacity_used_percent",
+    "ZFS pool used capacity percent",
+    ["device_name", "pool"],
+)
+
+ZFS_ALERT_COUNT = Gauge(
+    "backup_zfs_alert_count",
+    "ZFS alert or fault log count by severity",
+    ["device_name", "severity"],
+)

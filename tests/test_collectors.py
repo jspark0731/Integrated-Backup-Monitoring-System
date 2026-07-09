@@ -4,6 +4,7 @@ from app.collectors.factory import build_collector
 from app.collectors.dxi_cli import DxiCliCollector, parse_dxi_cli_outputs
 from app.collectors.i6000_rest import I6000RestCollector, parse_i6000_rest_payload
 from app.collectors.networker_rest import NetworkerRestCollector, parse_networker_rest_payload
+from app.collectors.zfs_rest import ZfsRestCollector, parse_zfs_rest_payload
 from app.core.config import CollectorConfig
 
 
@@ -99,6 +100,24 @@ def test_networker_rest_collector_uses_default_endpoint_map() -> None:
     )
 
     assert isinstance(collector, NetworkerRestCollector)
+    assert collector.config.skip_reason is None
+
+
+def test_zfs_rest_collector_uses_default_endpoint_map() -> None:
+    collector = build_collector(
+        CollectorConfig(
+            name="ZFS_1",
+            type="ZFS",
+            protocol="rest",
+            enabled=True,
+            schedule_second=45,
+            base_url="https://zfs-storage.example.com:215",
+            username="root",
+            password="secret",
+        )
+    )
+
+    assert isinstance(collector, ZfsRestCollector)
     assert collector.config.skip_reason is None
 
 
@@ -289,6 +308,91 @@ def test_networker_rest_parser_extracts_backup_summary_values() -> None:
     assert parsed["clients"][1]["client_os_family"] == "Windows"
     assert parsed["workflows"][0]["action_count"] == 1
     assert parsed["monthly_report"][0]["client_count"] == 2
+
+
+def test_zfs_rest_parser_extracts_storage_summary_values() -> None:
+    parsed = parse_zfs_rest_payload(
+        {
+            "version": {
+                "version": {
+                    "os_nodename": "zfs-prod-1",
+                    "ak_product": "Oracle ZFS Storage Appliance",
+                    "os_version": "nas/generic@2021.08.01",
+                    "hw_csn": "AK123",
+                }
+            },
+            "pools": {
+                "pools": [
+                    {
+                        "name": "p1",
+                        "state": "online",
+                        "profile": "raidz1",
+                    }
+                ]
+            },
+            "pool:p1": {
+                "pool": {
+                    "name": "p1",
+                    "state": "online",
+                    "profile": "raidz1",
+                    "usage": {
+                        "total": 1000,
+                        "used": 250,
+                        "free": 750,
+                        "usage_snapshots": 50,
+                        "usage_replication": 25,
+                    },
+                }
+            },
+            "projects:p1": {"projects": [{"name": "proj-01"}]},
+            "project:p1/proj-01": {
+                "project": {
+                    "name": "proj-01",
+                    "mountpoint": "/export",
+                    "dedup": False,
+                    "sharenfs": "on",
+                    "sharesmb": "off",
+                }
+            },
+            "filesystems:p1/proj-01": {
+                "filesystems": [
+                    {
+                        "name": "fs-01",
+                        "pool": "p1",
+                        "project": "proj-01",
+                        "mountpoint": "/export/fs-01",
+                    }
+                ]
+            },
+            "luns:p1/proj-01": {
+                "luns": [
+                    {
+                        "id": "lun-id",
+                        "name": "lun-01",
+                        "status": "online",
+                        "volsize": 100,
+                    }
+                ]
+            },
+            "alert_logs": {"logs": [{"summary": "Alert raised", "timestamp": "20210701T00:00:00"}]},
+            "fault_logs": {"logs": [{"summary": "Disk fault", "timestamp": "20210701T00:01:00"}]},
+        },
+        fallback_name="ZFS_1",
+    )
+
+    assert parsed["summary"]["device_name"] == "zfs-prod-1"
+    assert parsed["summary"]["pool_count"] == 1
+    assert parsed["summary"]["project_count"] == 1
+    assert parsed["summary"]["filesystem_count"] == 1
+    assert parsed["summary"]["lun_count"] == 1
+    assert parsed["summary"]["alert_count"] == 1
+    assert parsed["summary"]["fault_count"] == 1
+    assert parsed["summary"]["used_percent"] == 25
+    assert parsed["pools"][0]["up"] == 1
+    assert parsed["pools"][0]["used_percent"] == 25
+    assert parsed["projects"][0]["mountpoint"] == "/export"
+    assert parsed["filesystems"][0]["name"] == "fs-01"
+    assert parsed["luns"][0]["status"] == "online"
 
 
 @pytest.mark.asyncio
