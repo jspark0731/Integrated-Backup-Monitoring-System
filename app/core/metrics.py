@@ -80,6 +80,36 @@ DEVICE_INTERFACE_UP = Gauge(
     ["device_type", "device_name", "interface"],
 )
 
+DD_DDBOOST_UP = Gauge(
+    "backup_dd_ddboost_up",
+    "DD Boost state, 1 means enabled",
+    ["device_name"],
+)
+
+DD_DDBOOST_CONNECTIONS = Gauge(
+    "backup_dd_ddboost_connections",
+    "DD Boost connection count by direction",
+    ["device_name", "direction"],
+)
+
+DD_DDBOOST_THROUGHPUT_KBPS = Gauge(
+    "backup_dd_ddboost_throughput_kbps",
+    "DD Boost throughput in KiB/s by stream type",
+    ["device_name", "stream"],
+)
+
+DD_DDBOOST_STORAGE_UNIT_BYTES = Gauge(
+    "backup_dd_ddboost_storage_unit_bytes",
+    "DD Boost storage unit bytes by size type",
+    ["device_name", "storage_unit", "size_type"],
+)
+
+DD_DDBOOST_STORAGE_UNIT_COMPRESSION = Gauge(
+    "backup_dd_ddboost_storage_unit_compression",
+    "DD Boost storage unit compression factor by compression type",
+    ["device_name", "storage_unit", "compression_type"],
+)
+
 TAPE_LIBRARY_STATUS = Gauge(
     "backup_tape_library_status",
     "Tape library status, 1 means ready and online",

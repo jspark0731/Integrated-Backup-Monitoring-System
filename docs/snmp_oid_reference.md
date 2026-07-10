@@ -12,6 +12,15 @@ capacity totals.
 Capacity, deduplication, replication, interface, and alert count collection is
 handled by the DXi SSH collector. See `docs/dxi_cli_collection.md`.
 
+## Data Domain
+
+The DD4500 and DD6900 MIBs expose Data Domain system, file-system, alert,
+replication, MTree, and DD Boost objects under `1.3.6.1.4.1.19746`.
+
+DD collection uses SNMP for the standard dashboard fields, including DD Boost
+status, connection counts, throughput, compression, and storage-unit rows. See
+`docs/dd_snmp_collection.md`.
+
 Scalar GET OIDs use the `.0` instance suffix:
 
 | Metric | OID |

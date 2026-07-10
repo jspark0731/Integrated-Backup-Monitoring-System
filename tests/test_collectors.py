@@ -1,6 +1,7 @@
 import pytest
 
 from app.collectors.factory import build_collector
+from app.collectors.dd_snmp_collector import DDSnmpCollector, parse_dd_snmp_payload
 from app.collectors.dxi_cli_snmp_collector import DXiCliSnmpCollector, parse_dxi_cli_outputs
 from app.collectors.i6000_rest_collector import I6000RestCollector, parse_i6000_rest_payload
 from app.collectors.networker_rest_collector import NetworkerRestCollector, parse_networker_rest_payload
@@ -43,6 +44,73 @@ def test_snmp_collector_accepts_walk_only_config() -> None:
         )
     )
 
+    assert collector.config.skip_reason is None
+
+
+def test_dd_snmp_parser_extracts_ddboost_summary_values() -> None:
+    summary = parse_dd_snmp_payload(
+        {
+            "system_serial_number": "SN123",
+            "system_model": "DD6900",
+            "system_version": "6.0",
+            "file_system_status": "enabled",
+            "ddboost_status": "1",
+            "file_system_space_size": [{"oid": "x.1", "instance": "1", "value": "100"}],
+            "file_system_space_used": [{"oid": "x.1", "instance": "1", "value": "72"}],
+            "file_system_percent_used": [{"oid": "x.1", "instance": "1", "value": "72"}],
+            "file_system_total_compression_factor": [{"oid": "x.1", "instance": "1", "value": "12.5"}],
+            "current_alert_severity": [
+                {"oid": "x.1", "instance": "1", "value": "critical"},
+                {"oid": "x.2", "instance": "2", "value": "warning"},
+                {"oid": "x.3", "instance": "3", "value": "warning"},
+            ],
+            "replication_destination": [{"oid": "x.1", "instance": "1", "value": "target-a"}],
+            "replication_state": [{"oid": "x.1", "instance": "1", "value": "enabled"}],
+            "ddboost_backup_connections": [{"oid": "x.1", "instance": "1", "value": "3"}],
+            "ddboost_restore_connections": [{"oid": "x.1", "instance": "1", "value": "1"}],
+            "ddboost_pre_comp_kbps": [{"oid": "x.1", "instance": "1", "value": "2048"}],
+            "ddboost_storage_unit_name": [{"oid": "x.1", "instance": "1", "value": "stu-a"}],
+            "ddboost_storage_unit_bytes": [{"oid": "x.1", "instance": "1", "value": "1024"}],
+            "ddboost_storage_unit_global_comp": [{"oid": "x.1", "instance": "1", "value": "8.5"}],
+        },
+        fallback_name="DD6900_1",
+    )
+
+    assert summary["device_name"] == "DD6900_1"
+    assert summary["serial_number"] == "SN123"
+    assert summary["capacity"]["total_bytes"] == 100 * 1024**3
+    assert summary["capacity"]["used_percent"] == 72
+    assert summary["dedup_ratio"] == 12.5
+    assert summary["alert_counts"]["warning"] == 2
+    assert summary["replication"][0]["up"] == 1
+    assert summary["ddboost"]["enabled"] is True
+    assert summary["ddboost"]["connections"]["backup"] == 3
+    assert summary["ddboost"]["throughput_kbps"]["pre_compression"] == 2048
+    assert summary["ddboost"]["storage_units"][0]["name"] == "stu-a"
+
+
+def test_dd_snmp_collector_accepts_data_domain_mib_oids() -> None:
+    collector = build_collector(
+        CollectorConfig(
+            name="DD6900_1",
+            type="DD",
+            protocol="snmp",
+            enabled=True,
+            schedule_second=0,
+            host="192.0.2.30",
+            community="public",
+            oids={
+                "file_system_status": "1.3.6.1.4.1.19746.1.3.1.1.0",
+                "ddboost_status": "1.3.6.1.4.1.19746.1.12.1.1.0",
+            },
+            walk_oids={
+                "file_system_space_used": "1.3.6.1.4.1.19746.1.3.2.1.1.5",
+                "ddboost_storage_unit_name": "1.3.6.1.4.1.19746.1.12.4.1.1.2",
+            },
+        )
+    )
+
+    assert isinstance(collector, DDSnmpCollector)
     assert collector.config.skip_reason is None
 
 

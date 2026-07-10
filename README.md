@@ -13,7 +13,7 @@ The project builds one collector codebase into five target-specific images:
 ## Collectors
 
 - DXi CLI + SNMP: device identity and basic state from SNMP, plus capacity, deduplication, replication, interface, and alert data from CLI output
-- DD SNMP: placeholder configuration
+- DD SNMP: system identity, file-system capacity/compression, alerts, replication, and DD Boost status/storage-unit metrics from the Data Domain MIB
 - i6000 REST: library, RAS subsystem, partition, drive, door, slot, and media status from the Scalar Web Services API
 - Networker REST: job, client, protection policy, workflow, backup, and monthly summary data from the NetWorker REST API
 - ZFS REST: appliance version, pool capacity, project, filesystem, LUN, alert, and fault data from the Oracle ZFS Storage Appliance REST API
@@ -81,6 +81,13 @@ document those OIDs.
 
 See [DXi CLI Collection](docs/dxi_cli_collection.md).
 
+## DD SNMP Collection
+
+DD collection uses the Data Domain MIB under `1.3.6.1.4.1.19746`. The provided
+DD4500/DD6900 MIBs cover the standard dashboard fields, including DD Boost
+storage-unit metrics, so CLI fallback is not required unless command-native
+troubleshooting output is needed. See [DD SNMP Collection](docs/dd_snmp_collection.md).
+
 ## i6000 REST Collection
 
 i6000 collection uses the Scalar i6000 RESTful Web Services API only. This
@@ -113,7 +120,7 @@ pools, pool details, projects, filesystems, LUNs, alert logs, and fault logs.
 ## Storage
 
 Elasticsearch receives the full collection document, including raw payloads.
-Prometheus receives collector health metrics plus normalized DXi and i6000
+Prometheus receives collector health metrics plus normalized DXi, DD, and i6000
 gauges when the collectors can extract those values. NetWorker also publishes
 API reachability, job counts by policy, workflow counts, and client count. ZFS
 publishes API reachability, pool status, pool used capacity percent, and

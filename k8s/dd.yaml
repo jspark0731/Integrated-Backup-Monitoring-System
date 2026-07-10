@@ -28,13 +28,47 @@ data:
           minute_offset: 1
           second: 0
         host: DD4500_host_TO_BE_FILLED
-        port: 161
+        snmp_port: 161
         community_file: /app/secrets/dd/dd4500-community
         version: "2c"
         oids:
-          capacity_total: DD4500_capacity_total_oid_TO_BE_FILLED
-          capacity_used: DD4500_capacity_used_oid_TO_BE_FILLED
-          health_status: DD4500_health_status_oid_TO_BE_FILLED
+          system_serial_number: 1.3.6.1.4.1.19746.1.13.1.1.0
+          system_version: 1.3.6.1.4.1.19746.1.13.1.3.0
+          system_model: 1.3.6.1.4.1.19746.1.13.1.4.0
+          file_system_status: 1.3.6.1.4.1.19746.1.3.1.1.0
+          ddboost_status: 1.3.6.1.4.1.19746.1.12.1.1.0
+        walk_oids:
+          file_system_space_size: 1.3.6.1.4.1.19746.1.3.2.1.1.4
+          file_system_space_used: 1.3.6.1.4.1.19746.1.3.2.1.1.5
+          file_system_space_available: 1.3.6.1.4.1.19746.1.3.2.1.1.6
+          file_system_percent_used: 1.3.6.1.4.1.19746.1.3.2.1.1.7
+          file_system_total_compression_factor: 1.3.6.1.4.1.19746.1.3.3.1.1.9
+          file_system_reduction_percent: 1.3.6.1.4.1.19746.1.3.3.1.1.11
+          current_alert_severity: 1.3.6.1.4.1.19746.1.4.1.1.1.4
+          replication_state: 1.3.6.1.4.1.19746.1.8.1.1.1.3
+          replication_status: 1.3.6.1.4.1.19746.1.8.1.1.1.4
+          replication_source: 1.3.6.1.4.1.19746.1.8.1.1.1.7
+          replication_destination: 1.3.6.1.4.1.19746.1.8.1.1.1.8
+          ddboost_user_name: 1.3.6.1.4.1.19746.1.12.1.4.1.2
+          ddboost_ifgroup_name: 1.3.6.1.4.1.19746.1.12.1.5.1.2
+          ddboost_ifgroup_status: 1.3.6.1.4.1.19746.1.12.1.5.1.3
+          ddboost_pre_comp_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.2
+          ddboost_post_comp_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.3
+          ddboost_network_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.4
+          ddboost_read_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.5
+          ddboost_backup_connections: 1.3.6.1.4.1.19746.1.12.2.1.1.6
+          ddboost_restore_connections: 1.3.6.1.4.1.19746.1.12.2.1.1.7
+          ddboost_compression_ratio: 1.3.6.1.4.1.19746.1.12.2.1.1.16
+          ddboost_storage_unit_name: 1.3.6.1.4.1.19746.1.12.4.1.1.2
+          ddboost_storage_unit_bytes: 1.3.6.1.4.1.19746.1.12.4.1.1.3
+          ddboost_storage_unit_global_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.4
+          ddboost_storage_unit_local_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.5
+          ddboost_storage_unit_metadata: 1.3.6.1.4.1.19746.1.12.4.1.1.6
+          ddboost_storage_unit_status: 1.3.6.1.4.1.19746.1.12.4.1.1.7
+          ddboost_storage_unit_pre_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.8
+          ddboost_storage_unit_user: 1.3.6.1.4.1.19746.1.12.4.1.1.9
+          ddboost_storage_unit_report_physical_size: 1.3.6.1.4.1.19746.1.12.4.1.1.10
+          ddboost_storage_unit_bytes_hc: 1.3.6.1.4.1.19746.1.12.4.1.1.11
       - name: DD6900_1
         type: DD
         protocol: snmp
@@ -44,13 +78,47 @@ data:
           minute_offset: 1
           second: 0
         host: DD6900_1_host_TO_BE_FILLED
-        port: 161
+        snmp_port: 161
         community_file: /app/secrets/dd/dd6900-1-community
         version: "2c"
         oids:
-          capacity_total: DD6900_1_capacity_total_oid_TO_BE_FILLED
-          capacity_used: DD6900_1_capacity_used_oid_TO_BE_FILLED
-          health_status: DD6900_1_health_status_oid_TO_BE_FILLED
+          system_serial_number: 1.3.6.1.4.1.19746.1.13.1.1.0
+          system_version: 1.3.6.1.4.1.19746.1.13.1.3.0
+          system_model: 1.3.6.1.4.1.19746.1.13.1.4.0
+          file_system_status: 1.3.6.1.4.1.19746.1.3.1.1.0
+          ddboost_status: 1.3.6.1.4.1.19746.1.12.1.1.0
+        walk_oids:
+          file_system_space_size: 1.3.6.1.4.1.19746.1.3.2.1.1.4
+          file_system_space_used: 1.3.6.1.4.1.19746.1.3.2.1.1.5
+          file_system_space_available: 1.3.6.1.4.1.19746.1.3.2.1.1.6
+          file_system_percent_used: 1.3.6.1.4.1.19746.1.3.2.1.1.7
+          file_system_total_compression_factor: 1.3.6.1.4.1.19746.1.3.3.1.1.9
+          file_system_reduction_percent: 1.3.6.1.4.1.19746.1.3.3.1.1.11
+          current_alert_severity: 1.3.6.1.4.1.19746.1.4.1.1.1.4
+          replication_state: 1.3.6.1.4.1.19746.1.8.1.1.1.3
+          replication_status: 1.3.6.1.4.1.19746.1.8.1.1.1.4
+          replication_source: 1.3.6.1.4.1.19746.1.8.1.1.1.7
+          replication_destination: 1.3.6.1.4.1.19746.1.8.1.1.1.8
+          ddboost_user_name: 1.3.6.1.4.1.19746.1.12.1.4.1.2
+          ddboost_ifgroup_name: 1.3.6.1.4.1.19746.1.12.1.5.1.2
+          ddboost_ifgroup_status: 1.3.6.1.4.1.19746.1.12.1.5.1.3
+          ddboost_pre_comp_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.2
+          ddboost_post_comp_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.3
+          ddboost_network_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.4
+          ddboost_read_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.5
+          ddboost_backup_connections: 1.3.6.1.4.1.19746.1.12.2.1.1.6
+          ddboost_restore_connections: 1.3.6.1.4.1.19746.1.12.2.1.1.7
+          ddboost_compression_ratio: 1.3.6.1.4.1.19746.1.12.2.1.1.16
+          ddboost_storage_unit_name: 1.3.6.1.4.1.19746.1.12.4.1.1.2
+          ddboost_storage_unit_bytes: 1.3.6.1.4.1.19746.1.12.4.1.1.3
+          ddboost_storage_unit_global_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.4
+          ddboost_storage_unit_local_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.5
+          ddboost_storage_unit_metadata: 1.3.6.1.4.1.19746.1.12.4.1.1.6
+          ddboost_storage_unit_status: 1.3.6.1.4.1.19746.1.12.4.1.1.7
+          ddboost_storage_unit_pre_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.8
+          ddboost_storage_unit_user: 1.3.6.1.4.1.19746.1.12.4.1.1.9
+          ddboost_storage_unit_report_physical_size: 1.3.6.1.4.1.19746.1.12.4.1.1.10
+          ddboost_storage_unit_bytes_hc: 1.3.6.1.4.1.19746.1.12.4.1.1.11
       - name: DD6900_2
         type: DD
         protocol: snmp
@@ -60,13 +128,47 @@ data:
           minute_offset: 1
           second: 0
         host: DD6900_2_host_TO_BE_FILLED
-        port: 161
+        snmp_port: 161
         community_file: /app/secrets/dd/dd6900-2-community
         version: "2c"
         oids:
-          capacity_total: DD6900_2_capacity_total_oid_TO_BE_FILLED
-          capacity_used: DD6900_2_capacity_used_oid_TO_BE_FILLED
-          health_status: DD6900_2_health_status_oid_TO_BE_FILLED
+          system_serial_number: 1.3.6.1.4.1.19746.1.13.1.1.0
+          system_version: 1.3.6.1.4.1.19746.1.13.1.3.0
+          system_model: 1.3.6.1.4.1.19746.1.13.1.4.0
+          file_system_status: 1.3.6.1.4.1.19746.1.3.1.1.0
+          ddboost_status: 1.3.6.1.4.1.19746.1.12.1.1.0
+        walk_oids:
+          file_system_space_size: 1.3.6.1.4.1.19746.1.3.2.1.1.4
+          file_system_space_used: 1.3.6.1.4.1.19746.1.3.2.1.1.5
+          file_system_space_available: 1.3.6.1.4.1.19746.1.3.2.1.1.6
+          file_system_percent_used: 1.3.6.1.4.1.19746.1.3.2.1.1.7
+          file_system_total_compression_factor: 1.3.6.1.4.1.19746.1.3.3.1.1.9
+          file_system_reduction_percent: 1.3.6.1.4.1.19746.1.3.3.1.1.11
+          current_alert_severity: 1.3.6.1.4.1.19746.1.4.1.1.1.4
+          replication_state: 1.3.6.1.4.1.19746.1.8.1.1.1.3
+          replication_status: 1.3.6.1.4.1.19746.1.8.1.1.1.4
+          replication_source: 1.3.6.1.4.1.19746.1.8.1.1.1.7
+          replication_destination: 1.3.6.1.4.1.19746.1.8.1.1.1.8
+          ddboost_user_name: 1.3.6.1.4.1.19746.1.12.1.4.1.2
+          ddboost_ifgroup_name: 1.3.6.1.4.1.19746.1.12.1.5.1.2
+          ddboost_ifgroup_status: 1.3.6.1.4.1.19746.1.12.1.5.1.3
+          ddboost_pre_comp_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.2
+          ddboost_post_comp_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.3
+          ddboost_network_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.4
+          ddboost_read_kbps: 1.3.6.1.4.1.19746.1.12.2.1.1.5
+          ddboost_backup_connections: 1.3.6.1.4.1.19746.1.12.2.1.1.6
+          ddboost_restore_connections: 1.3.6.1.4.1.19746.1.12.2.1.1.7
+          ddboost_compression_ratio: 1.3.6.1.4.1.19746.1.12.2.1.1.16
+          ddboost_storage_unit_name: 1.3.6.1.4.1.19746.1.12.4.1.1.2
+          ddboost_storage_unit_bytes: 1.3.6.1.4.1.19746.1.12.4.1.1.3
+          ddboost_storage_unit_global_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.4
+          ddboost_storage_unit_local_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.5
+          ddboost_storage_unit_metadata: 1.3.6.1.4.1.19746.1.12.4.1.1.6
+          ddboost_storage_unit_status: 1.3.6.1.4.1.19746.1.12.4.1.1.7
+          ddboost_storage_unit_pre_comp: 1.3.6.1.4.1.19746.1.12.4.1.1.8
+          ddboost_storage_unit_user: 1.3.6.1.4.1.19746.1.12.4.1.1.9
+          ddboost_storage_unit_report_physical_size: 1.3.6.1.4.1.19746.1.12.4.1.1.10
+          ddboost_storage_unit_bytes_hc: 1.3.6.1.4.1.19746.1.12.4.1.1.11
 ---
 apiVersion: apps/v1
 kind: Deployment
