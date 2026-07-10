@@ -1,10 +1,10 @@
 import pytest
 
 from app.collectors.factory import build_collector
-from app.collectors.dxi_cli import DxiCliCollector, parse_dxi_cli_outputs
-from app.collectors.i6000_rest import I6000RestCollector, parse_i6000_rest_payload
-from app.collectors.networker_rest import NetworkerRestCollector, parse_networker_rest_payload
-from app.collectors.zfs_rest import ZfsRestCollector, parse_zfs_rest_payload
+from app.collectors.dxi_cli_snmp_collector import DXiCliSnmpCollector, parse_dxi_cli_outputs
+from app.collectors.i6000_rest_collector import I6000RestCollector, parse_i6000_rest_payload
+from app.collectors.networker_rest_collector import NetworkerRestCollector, parse_networker_rest_payload
+from app.collectors.zfs_rest_collector import ZfsRestCollector, parse_zfs_rest_payload
 from app.core.config import CollectorConfig
 
 
@@ -12,14 +12,14 @@ from app.core.config import CollectorConfig
 async def test_snmp_collector_skips_unfilled_config() -> None:
     collector = build_collector(
         CollectorConfig(
-            name="DXi_1",
-            type="DXi",
+            name="DD4500",
+            type="DD",
             protocol="snmp",
             enabled=True,
             schedule_second=0,
-            host="DXi_1_host_TO_BE_FILLED",
-            community="DXi_1_community_TO_BE_FILLED",
-            oids={"capacity": "DXi_1_capacity_oid_TO_BE_FILLED"},
+            host="DD4500_host_TO_BE_FILLED",
+            community="DD4500_community_TO_BE_FILLED",
+            oids={"capacity": "DD4500_capacity_oid_TO_BE_FILLED"},
         )
     )
 
@@ -46,23 +46,44 @@ def test_snmp_collector_accepts_walk_only_config() -> None:
     assert collector.config.skip_reason is None
 
 
-def test_dxi_ssh_collector_accepts_command_config() -> None:
+def test_dxi_standalone_ssh_collector_is_rejected() -> None:
+    with pytest.raises(ValueError, match="DXi standalone"):
+        build_collector(
+            CollectorConfig(
+                name="DXi_1_legacy_ssh",
+                type="DXi",
+                protocol="ssh",
+                enabled=True,
+                schedule_second=0,
+                host="192.0.2.20",
+                port=22,
+                username="admin",
+                password="secret",
+                commands={"capacity": "show capacity"},
+            )
+        )
+
+
+def test_dxi_cli_snmp_collector_accepts_combined_config() -> None:
     collector = build_collector(
         CollectorConfig(
-            name="DXi_1_cli",
+            name="DXi_1",
             type="DXi",
-            protocol="ssh",
+            protocol="cli_snmp",
             enabled=True,
             schedule_second=0,
             host="192.0.2.20",
-            port=22,
+            snmp_port=161,
+            ssh_port=22,
+            community="public",
             username="admin",
             password="secret",
+            oids={"state": "1.3.6.1.4.1.2036.2.1.1.7.0"},
             commands={"capacity": "show capacity"},
         )
     )
 
-    assert isinstance(collector, DxiCliCollector)
+    assert isinstance(collector, DXiCliSnmpCollector)
     assert collector.config.skip_reason is None
 
 
@@ -83,6 +104,22 @@ def test_i6000_rest_collector_accepts_endpoint_map() -> None:
 
     assert isinstance(collector, I6000RestCollector)
     assert collector.config.skip_reason is None
+
+
+def test_i6000_snmp_collector_is_rejected() -> None:
+    with pytest.raises(ValueError, match="i6000 SNMP"):
+        build_collector(
+            CollectorConfig(
+                name="i6000_core_snmp",
+                type="i6000",
+                protocol="snmp",
+                enabled=True,
+                schedule_second=15,
+                host="192.0.2.40",
+                community="public",
+                oids={"library_status": "1.3.6.1.2.1.1.1.0"},
+            )
+        )
 
 
 def test_networker_rest_collector_uses_default_endpoint_map() -> None:
@@ -131,7 +168,7 @@ def test_dxi_cli_parser_extracts_summary_values() -> None:
             "interfaces": "eth0: up\neth1: down\n",
             "alerts": "Critical Alerts: 2\nWarning Alerts: 3\n",
         },
-        fallback_name="DXi_1_cli",
+        fallback_name="DXi_1",
     )
 
     assert summary["device_name"] == "DXi_1"

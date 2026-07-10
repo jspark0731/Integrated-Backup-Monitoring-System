@@ -23,7 +23,10 @@ data:
         type: DD
         protocol: snmp
         enabled: true
-        schedule_second: 0
+        schedule:
+          interval_minutes: 5
+          minute_offset: 1
+          second: 0
         host: DD4500_host_TO_BE_FILLED
         port: 161
         community_file: /app/secrets/dd/dd4500-community
@@ -36,7 +39,10 @@ data:
         type: DD
         protocol: snmp
         enabled: true
-        schedule_second: 0
+        schedule:
+          interval_minutes: 5
+          minute_offset: 1
+          second: 0
         host: DD6900_1_host_TO_BE_FILLED
         port: 161
         community_file: /app/secrets/dd/dd6900-1-community
@@ -49,7 +55,10 @@ data:
         type: DD
         protocol: snmp
         enabled: true
-        schedule_second: 0
+        schedule:
+          interval_minutes: 5
+          minute_offset: 1
+          second: 0
         host: DD6900_2_host_TO_BE_FILLED
         port: 161
         community_file: /app/secrets/dd/dd6900-2-community

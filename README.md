@@ -12,8 +12,7 @@ The project builds one collector codebase into five target-specific images:
 
 ## Collectors
 
-- DXi SNMP: device identity and basic state from Quantum SNMP OIDs
-- DXi SSH: capacity, deduplication, replication, interface, and alert data from CLI output
+- DXi CLI + SNMP: device identity and basic state from SNMP, plus capacity, deduplication, replication, interface, and alert data from CLI output
 - DD SNMP: placeholder configuration
 - i6000 REST: library, RAS subsystem, partition, drive, door, slot, and media status from the Scalar Web Services API
 - Networker REST: job, client, protection policy, workflow, backup, and monthly summary data from the NetWorker REST API

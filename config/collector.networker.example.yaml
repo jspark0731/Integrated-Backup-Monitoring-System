@@ -16,7 +16,10 @@ collectors:
     type: Networker
     protocol: rest
     enabled: true
-    schedule_second: 30
+    schedule:
+      interval_minutes: 5
+      minute_offset: 3
+      second: 0
     base_url: networker_core_base_url_TO_BE_FILLED
     method: GET
     token: networker_core_token_TO_BE_FILLED
@@ -28,7 +31,10 @@ collectors:
     type: Networker
     protocol: rest
     enabled: true
-    schedule_second: 30
+    schedule:
+      interval_minutes: 5
+      minute_offset: 3
+      second: 0
     base_url: networker_chnl_base_url_TO_BE_FILLED
     method: GET
     token: networker_chnl_token_TO_BE_FILLED
@@ -40,7 +46,10 @@ collectors:
     type: Networker
     protocol: rest
     enabled: true
-    schedule_second: 30
+    schedule:
+      interval_minutes: 5
+      minute_offset: 3
+      second: 0
     base_url: networker_info_base_url_TO_BE_FILLED
     method: GET
     token: networker_info_token_TO_BE_FILLED
@@ -52,7 +61,10 @@ collectors:
     type: Networker
     protocol: rest
     enabled: true
-    schedule_second: 30
+    schedule:
+      interval_minutes: 5
+      minute_offset: 3
+      second: 0
     base_url: networker_ifrs_base_url_TO_BE_FILLED
     method: GET
     token: networker_ifrs_token_TO_BE_FILLED

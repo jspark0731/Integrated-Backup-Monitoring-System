@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import asyncio
-
-from app.collectors.base import BaseCollector
+from app.core.config import CollectorConfig
 
 
-class SnmpCollector(BaseCollector):
-    async def _collect_payload(self) -> dict:
-        return await asyncio.to_thread(self._collect_sync)
+class SnmpClient:
+    def __init__(self, config: CollectorConfig) -> None:
+        self.config = config
 
-    def _collect_sync(self) -> dict:
+    def collect_values(self) -> dict:
         from pysnmp.hlapi import (
             CommunityData,
             ContextData,
@@ -28,7 +26,7 @@ class SnmpCollector(BaseCollector):
             iterator = getCmd(
                 SnmpEngine(),
                 CommunityData(self.config.community, mpModel=mp_model),
-                UdpTransportTarget((self.config.host, self.config.port), timeout=5, retries=1),
+                UdpTransportTarget((self.config.host, self.config.snmp_port or self.config.port), timeout=5, retries=1),
                 ContextData(),
                 ObjectType(ObjectIdentity(oid)),
             )
@@ -45,10 +43,14 @@ class SnmpCollector(BaseCollector):
 
         for metric_name, base_oid in self.config.walk_oids.items():
             values[metric_name] = self._walk_oid(
-                nextCmd=nextCmd,
+                next_cmd=nextCmd,
                 snmp_engine=SnmpEngine(),
                 community_data=CommunityData(self.config.community, mpModel=mp_model),
-                transport_target=UdpTransportTarget((self.config.host, self.config.port), timeout=5, retries=1),
+                transport_target=UdpTransportTarget(
+                    (self.config.host, self.config.snmp_port or self.config.port),
+                    timeout=5,
+                    retries=1,
+                ),
                 context_data=ContextData(),
                 object_type=ObjectType(ObjectIdentity(base_oid)),
                 base_oid=base_oid,
@@ -59,7 +61,7 @@ class SnmpCollector(BaseCollector):
     @staticmethod
     def _walk_oid(
         *,
-        nextCmd,
+        next_cmd,
         snmp_engine,
         community_data,
         transport_target,
@@ -68,7 +70,7 @@ class SnmpCollector(BaseCollector):
         base_oid: str,
     ) -> list[dict[str, str]]:
         rows = []
-        iterator = nextCmd(
+        iterator = next_cmd(
             snmp_engine,
             community_data,
             transport_target,
@@ -89,7 +91,7 @@ class SnmpCollector(BaseCollector):
                 rows.append(
                     {
                         "oid": oid_text,
-                        "instance": SnmpCollector._instance_from_oid(base_oid, oid_text),
+                        "instance": SnmpClient._instance_from_oid(base_oid, oid_text),
                         "value": value.prettyPrint(),
                     }
                 )

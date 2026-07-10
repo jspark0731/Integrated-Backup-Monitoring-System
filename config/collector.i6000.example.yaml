@@ -16,7 +16,10 @@ collectors:
     type: i6000
     protocol: rest
     enabled: true
-    schedule_second: 15
+    schedule:
+      interval_minutes: 5
+      minute_offset: 2
+      second: 0
     base_url: https://i6000_core_host_TO_BE_FILLED
     username: i6000_core_username_TO_BE_FILLED
     password: i6000_core_password_TO_BE_FILLED
@@ -38,7 +41,10 @@ collectors:
     type: i6000
     protocol: rest
     enabled: true
-    schedule_second: 15
+    schedule:
+      interval_minutes: 5
+      minute_offset: 2
+      second: 0
     base_url: https://i6000_chnl_host_TO_BE_FILLED
     username: i6000_chnl_username_TO_BE_FILLED
     password: i6000_chnl_password_TO_BE_FILLED
@@ -49,7 +55,10 @@ collectors:
     type: i6000
     protocol: rest
     enabled: true
-    schedule_second: 15
+    schedule:
+      interval_minutes: 5
+      minute_offset: 2
+      second: 0
     base_url: https://i6000_info_host_TO_BE_FILLED
     username: i6000_info_username_TO_BE_FILLED
     password: i6000_info_password_TO_BE_FILLED
@@ -60,7 +69,10 @@ collectors:
     type: i6000
     protocol: rest
     enabled: true
-    schedule_second: 15
+    schedule:
+      interval_minutes: 5
+      minute_offset: 2
+      second: 0
     base_url: https://i6000_ifrs_host_TO_BE_FILLED
     username: i6000_ifrs_username_TO_BE_FILLED
     password: i6000_ifrs_password_TO_BE_FILLED

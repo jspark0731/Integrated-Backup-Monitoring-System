@@ -30,6 +30,11 @@ async def collectors(request: Request) -> list[dict]:
             "type": collector.target_type,
             "protocol": collector.protocol,
             "enabled": collector.config.enabled,
+            "schedule": {
+                "interval_minutes": collector.config.effective_schedule.interval_minutes,
+                "minute_offset": collector.config.effective_schedule.minute_offset,
+                "second": collector.config.effective_schedule.second,
+            },
             "schedule_second": collector.config.schedule_second,
             "skip_reason": collector.config.skip_reason,
             "last_result": scheduler.last_results.get(collector.name).to_document()
@@ -50,4 +55,3 @@ async def run_once(request: Request) -> list[dict]:
 @router.get("/metrics")
 async def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-

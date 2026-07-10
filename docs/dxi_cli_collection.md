@@ -5,14 +5,14 @@ not provide the full set of dashboard targets from section 7.1 of
 `Codex_Implementation_Guide.md`, such as capacity, deduplication ratio,
 replication status, interface status, and alert counts.
 
-For those operational values, this project supports a DXi SSH collector.
+For those operational values, this project uses the combined DXi CLI + SNMP collector.
 
 ## Collection Flow
 
 ```text
 collector schedule
-  -> SSH login to DXi
-  -> run configured CLI commands
+  -> SNMP get/walk for identity and basic state
+  -> SSH login to DXi and run configured CLI commands
   -> capture stdout
   -> parse text into a normalized summary
   -> store raw + summary payload in Elasticsearch
@@ -21,19 +21,28 @@ collector schedule
 
 ## Configuration
 
-Use `protocol: ssh` for DXi CLI collection.
+Use `protocol: cli_snmp` for DXi collection.
 
 ```yaml
-- name: DXi_1_cli
+- name: DXi_1
   type: DXi
-  protocol: ssh
+  protocol: cli_snmp
   enabled: true
-  schedule_second: 0
+  schedule:
+    interval_minutes: 5
+    minute_offset: 0
+    second: 0
   host: DXi_1_host_TO_BE_FILLED
-  port: 22
+  snmp_port: 161
+  ssh_port: 22
+  community: DXi_1_community_TO_BE_FILLED
+  version: "2c"
   username: DXi_1_username_TO_BE_FILLED
   password: DXi_1_password_TO_BE_FILLED
   command_timeout: 30
+  oids:
+    state: 1.3.6.1.4.1.2036.2.1.1.7.0
+    serial_number: 1.3.6.1.4.1.2036.2.1.1.12.0
   commands:
     status: "show status"
     capacity: "show capacity"
@@ -91,7 +100,7 @@ DXi SNMP identity/state results are stored separately in
 
 ## Prometheus Metrics
 
-The DXi SSH collector publishes these normalized gauges when values can be
+The DXi CLI + SNMP collector publishes these normalized gauges when values can be
 parsed:
 
 ```text
@@ -103,7 +112,7 @@ backup_device_dedup_ratio{device_type="dxi",device_name="DXi_1"} 12.5
 backup_device_alert_count{device_type="dxi",device_name="DXi_1",severity="critical"} 0
 backup_device_replication_up{device_type="dxi",device_name="DXi_1",replication="target-a"} 1
 backup_device_interface_up{device_type="dxi",device_name="DXi_1",interface="eth0"} 1
-backup_collector_last_success_timestamp{collector="DXi_1_cli"} 1710000000
+backup_collector_last_success_timestamp{collector="DXi_1"} 1710000000
 ```
 
 ## Notes

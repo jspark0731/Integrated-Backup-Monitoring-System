@@ -51,8 +51,8 @@
 
   <rect x="820" y="230" width="260" height="110" class="box accent-blue" rx="8"/>
   <text x="845" y="265" class="box-title">Collector Factory</text>
-  <text x="845" y="294" class="box-text">protocol=snmp -> SnmpCollector</text>
-  <text x="845" y="321" class="box-text">protocol=rest -> RestCollector</text>
+  <text x="845" y="294" class="box-text">DD/snmp -> DDSnmpCollector</text>
+  <text x="845" y="321" class="box-text">i6000, NetWorker, ZFS -> REST collectors</text>
 
   <rect x="635" y="410" width="270" height="120" class="box accent-green" rx="8"/>
   <text x="660" y="445" class="box-title">Collector Scheduler</text>

@@ -5,12 +5,12 @@ from app.models import CollectionResult
 from app.writers.elasticsearch import ElasticsearchWriter
 
 
-def test_dxi_ssh_results_use_summary_index() -> None:
+def test_dxi_cli_snmp_results_use_summary_index() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     result = CollectionResult(
-        collector="DXi_1_cli",
+        collector="DXi_1",
         target_type="DXi",
-        protocol="ssh",
+        protocol="cli_snmp",
         collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
         ok=True,
     )
@@ -18,17 +18,17 @@ def test_dxi_ssh_results_use_summary_index() -> None:
     assert writer._index_name(result).startswith("backup-dxi-summary-")
 
 
-def test_dxi_snmp_results_use_status_index() -> None:
+def test_dd_snmp_results_use_status_index() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     result = CollectionResult(
-        collector="DXi_1",
-        target_type="DXi",
+        collector="DD4500",
+        target_type="DD",
         protocol="snmp",
         collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
         ok=True,
     )
 
-    assert writer._index_name(result).startswith("backup-dxi-status-")
+    assert writer._index_name(result).startswith("backup-dashboard-")
 
 
 def test_i6000_rest_results_expand_to_status_drive_media_indexes() -> None:

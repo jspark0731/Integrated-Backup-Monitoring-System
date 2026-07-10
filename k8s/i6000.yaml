@@ -23,7 +23,10 @@ data:
         type: i6000
         protocol: rest
         enabled: true
-        schedule_second: 15
+        schedule:
+          interval_minutes: 5
+          minute_offset: 2
+          second: 0
         base_url: https://i6000_core_host_TO_BE_FILLED
         username_file: /app/secrets/i6000/i6000-core-username
         password_file: /app/secrets/i6000/i6000-core-password
@@ -44,7 +47,10 @@ data:
         type: i6000
         protocol: rest
         enabled: true
-        schedule_second: 15
+        schedule:
+          interval_minutes: 5
+          minute_offset: 2
+          second: 0
         base_url: https://i6000_chnl_host_TO_BE_FILLED
         username_file: /app/secrets/i6000/i6000-chnl-username
         password_file: /app/secrets/i6000/i6000-chnl-password
@@ -54,7 +60,10 @@ data:
         type: i6000
         protocol: rest
         enabled: true
-        schedule_second: 15
+        schedule:
+          interval_minutes: 5
+          minute_offset: 2
+          second: 0
         base_url: https://i6000_info_host_TO_BE_FILLED
         username_file: /app/secrets/i6000/i6000-info-username
         password_file: /app/secrets/i6000/i6000-info-password
@@ -64,7 +73,10 @@ data:
         type: i6000
         protocol: rest
         enabled: true
-        schedule_second: 15
+        schedule:
+          interval_minutes: 5
+          minute_offset: 2
+          second: 0
         base_url: https://i6000_ifrs_host_TO_BE_FILLED
         username_file: /app/secrets/i6000/i6000-ifrs-username
         password_file: /app/secrets/i6000/i6000-ifrs-password

@@ -127,7 +127,7 @@ class ElasticsearchWriter:
     def _index_name(self, result: CollectionResult | None = None, document_type: str | None = None) -> str:
         if result and result.target_type == "DXi":
             month_suffix = datetime.now(timezone.utc).strftime("%Y.%m")
-            if result.protocol in {"ssh", "cli"}:
+            if result.protocol in {"ssh", "cli", "cli_snmp"}:
                 return f"backup-dxi-summary-{month_suffix}"
             return f"backup-dxi-status-{month_suffix}"
 

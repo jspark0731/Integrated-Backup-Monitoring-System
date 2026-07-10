@@ -3,13 +3,33 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+import logging
 
 import yaml
 
 TO_BE_FILLED = "TO_BE_FILLED"
+LOGGER = logging.getLogger(__name__)
 
 
-Protocol = Literal["snmp", "rest", "ssh", "cli"]
+Protocol = Literal["snmp", "rest", "ssh", "cli", "cli_snmp"]
+
+
+@dataclass(frozen=True)
+class ScheduleConfig:
+    interval_minutes: int = 5
+    minute_offset: int = 0
+    second: int = 0
+    legacy_schedule_second: int | None = None
+
+    @property
+    def skip_reason(self) -> str | None:
+        if self.interval_minutes <= 0:
+            return f"invalid schedule.interval_minutes: {self.interval_minutes}"
+        if self.minute_offset < 0 or self.minute_offset >= self.interval_minutes:
+            return f"invalid schedule.minute_offset: {self.minute_offset}"
+        if self.second < 0 or self.second > 59:
+            return f"invalid schedule.second: {self.second}"
+        return None
 
 
 @dataclass(frozen=True)
@@ -32,9 +52,12 @@ class CollectorConfig:
     type: str
     protocol: Protocol
     enabled: bool
-    schedule_second: int
+    schedule: ScheduleConfig | None = None
+    schedule_second: int | None = None
     host: str | None = None
     port: int = 161
+    snmp_port: int | None = None
+    ssh_port: int | None = None
     community: str | None = None
     version: str = "2c"
     oids: dict[str, str] = field(default_factory=dict)
@@ -52,17 +75,33 @@ class CollectorConfig:
     command_timeout: int = 30
 
     @property
+    def effective_schedule(self) -> ScheduleConfig:
+        if self.schedule is not None:
+            return self.schedule
+        if self.schedule_second is not None:
+            return ScheduleConfig(
+                interval_minutes=1,
+                minute_offset=0,
+                second=self.schedule_second,
+                legacy_schedule_second=self.schedule_second,
+            )
+        return default_schedule(self.type)
+
+    @property
     def skip_reason(self) -> str | None:
         if not self.enabled:
             return "collector is disabled"
-        if self.schedule_second < 0 or self.schedule_second > 59:
-            return f"invalid schedule_second: {self.schedule_second}"
+        schedule_skip_reason = self.effective_schedule.skip_reason
+        if schedule_skip_reason:
+            return schedule_skip_reason
         if self.protocol == "snmp":
             return self._snmp_skip_reason()
         if self.protocol == "rest":
             return self._rest_skip_reason()
         if self.protocol in {"ssh", "cli"}:
             return self._ssh_skip_reason()
+        if self.protocol == "cli_snmp":
+            return self._cli_snmp_skip_reason()
         return f"unsupported protocol: {self.protocol}"
 
     def _snmp_skip_reason(self) -> str | None:
@@ -120,6 +159,15 @@ class CollectorConfig:
             return "SSH command list is empty"
         return None
 
+    def _cli_snmp_skip_reason(self) -> str | None:
+        snmp_skip_reason = self._snmp_skip_reason()
+        if snmp_skip_reason:
+            return snmp_skip_reason
+        ssh_skip_reason = self._ssh_skip_reason()
+        if ssh_skip_reason:
+            return ssh_skip_reason
+        return None
+
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -169,14 +217,18 @@ def _parse_elasticsearch(raw: dict[str, Any]) -> ElasticsearchConfig:
 
 
 def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
+    schedule, legacy_schedule_second = _parse_schedule(raw, raw["type"])
     return CollectorConfig(
         name=raw["name"],
         type=raw["type"],
         protocol=raw["protocol"],
         enabled=bool(raw.get("enabled", True)),
-        schedule_second=int(raw.get("schedule_second", default_second(raw["type"]))),
+        schedule=schedule,
+        schedule_second=legacy_schedule_second,
         host=_optional(raw.get("host")),
         port=int(raw.get("port", 161)),
+        snmp_port=int(raw["snmp_port"]) if raw.get("snmp_port") is not None else None,
+        ssh_port=int(raw["ssh_port"]) if raw.get("ssh_port") is not None else None,
         community=_optional_secret(raw, "community"),
         version=str(raw.get("version", "2c")),
         oids=dict(raw.get("oids", {})),
@@ -195,15 +247,55 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
     )
 
 
-def default_second(target_type: str) -> int:
+def _parse_schedule(raw: dict[str, Any], target_type: str) -> tuple[ScheduleConfig, int | None]:
+    if "schedule" in raw:
+        schedule_raw = raw.get("schedule") or {}
+        return (
+            ScheduleConfig(
+                interval_minutes=int(schedule_raw.get("interval_minutes", 5)),
+                minute_offset=int(schedule_raw.get("minute_offset", default_minute_offset(target_type))),
+                second=int(schedule_raw.get("second", 0)),
+            ),
+            None,
+        )
+
+    if "schedule_second" in raw:
+        schedule_second = int(raw["schedule_second"])
+        LOGGER.warning(
+            "Collector %s uses deprecated schedule_second; use schedule.interval_minutes, "
+            "schedule.minute_offset, and schedule.second instead",
+            raw.get("name", target_type),
+        )
+        return (
+            ScheduleConfig(
+                interval_minutes=1,
+                minute_offset=0,
+                second=schedule_second,
+                legacy_schedule_second=schedule_second,
+            ),
+            schedule_second,
+        )
+
+    return default_schedule(target_type), None
+
+
+def default_schedule(target_type: str) -> ScheduleConfig:
+    return ScheduleConfig(interval_minutes=5, minute_offset=default_minute_offset(target_type), second=0)
+
+
+def default_minute_offset(target_type: str) -> int:
     schedules = {
         "DXi": 0,
-        "DD": 0,
-        "i6000": 15,
-        "Networker": 30,
-        "ZFS": 45,
+        "DD": 1,
+        "i6000": 2,
+        "Networker": 3,
+        "ZFS": 4,
     }
     return schedules[target_type]
+
+
+def default_second(target_type: str) -> int:
+    return default_schedule(target_type).second
 
 
 def _optional(value: Any) -> str | None:

@@ -16,7 +16,10 @@ collectors:
     type: ZFS
     protocol: rest
     enabled: true
-    schedule_second: 45
+    schedule:
+      interval_minutes: 5
+      minute_offset: 4
+      second: 0
     base_url: ZFS_1_base_url_TO_BE_FILLED
     method: GET
     token: ZFS_1_token_TO_BE_FILLED
@@ -28,7 +31,10 @@ collectors:
     type: ZFS
     protocol: rest
     enabled: true
-    schedule_second: 45
+    schedule:
+      interval_minutes: 5
+      minute_offset: 4
+      second: 0
     base_url: ZFS_2_base_url_TO_BE_FILLED
     method: GET
     token: ZFS_2_token_TO_BE_FILLED
@@ -40,7 +46,10 @@ collectors:
     type: ZFS
     protocol: rest
     enabled: true
-    schedule_second: 45
+    schedule:
+      interval_minutes: 5
+      minute_offset: 4
+      second: 0
     base_url: ZFS_3_base_url_TO_BE_FILLED
     method: GET
     token: ZFS_3_token_TO_BE_FILLED
@@ -52,7 +61,10 @@ collectors:
     type: ZFS
     protocol: rest
     enabled: true
-    schedule_second: 45
+    schedule:
+      interval_minutes: 5
+      minute_offset: 4
+      second: 0
     base_url: ZFS_4_base_url_TO_BE_FILLED
     method: GET
     token: ZFS_4_token_TO_BE_FILLED

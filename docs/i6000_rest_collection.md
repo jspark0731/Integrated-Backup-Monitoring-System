@@ -38,7 +38,10 @@ Services root host; endpoints are relative paths under that host.
   type: i6000
   protocol: rest
   enabled: true
-  schedule_second: 15
+  schedule:
+    interval_minutes: 5
+    minute_offset: 2
+    second: 0
   base_url: https://i6000_core.example.com
   username: admin
   password: secret

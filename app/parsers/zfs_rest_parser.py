@@ -2,121 +2,6 @@ from __future__ import annotations
 
 from collections import Counter
 from typing import Any
-from urllib.parse import quote, urljoin
-
-import httpx
-
-from app.collectors.base import BaseCollector
-from app.core.metrics import (
-    ZFS_ALERT_COUNT,
-    ZFS_API_UP,
-    ZFS_CAPACITY_USED_PERCENT,
-    ZFS_POOL_STATUS,
-)
-
-
-DEFAULT_ENDPOINTS = {
-    "version": "api/system/v1/version",
-    "pools": "api/storage/v1/pools",
-    "logs": "api/log/v1/logs",
-    "alert_logs": "api/log/v1/logs/alert?limit=100",
-    "fault_logs": "api/log/v1/logs/fault?limit=100",
-}
-
-
-class ZfsRestCollector(BaseCollector):
-    async def _collect_payload(self) -> dict:
-        raw = await self._fetch_payloads()
-        parsed = parse_zfs_rest_payload(raw, fallback_name=self.name)
-        self._publish_metrics(parsed["summary"], parsed["pools"])
-        return {
-            "summary": parsed["summary"],
-            "pools": parsed["pools"],
-            "projects": parsed["projects"],
-            "filesystems": parsed["filesystems"],
-            "luns": parsed["luns"],
-            "alerts": parsed["alerts"],
-            "raw": raw,
-        }
-
-    async def _fetch_payloads(self) -> dict[str, Any]:
-        endpoints = self.config.endpoints or DEFAULT_ENDPOINTS
-        headers = {"Accept": "application/json"}
-        auth = None
-
-        if self.config.token:
-            headers["Authorization"] = f"Bearer {self.config.token}"
-        if self.config.username and self.config.password:
-            auth = (self.config.username, self.config.password)
-
-        async with httpx.AsyncClient(verify=self.config.verify_tls, timeout=30) as client:
-            payloads = {}
-            for name, endpoint in endpoints.items():
-                payloads[name] = await self._get_json(client, endpoint, headers, auth)
-
-            for pool in _items(payloads.get("pools"), "pools"):
-                pool_name = _string(pool.get("name"))
-                if not pool_name:
-                    continue
-                pool_path = f"api/storage/v1/pools/{_quote(pool_name)}"
-                payloads[f"pool:{pool_name}"] = await self._get_json(client, pool_path, headers, auth)
-                projects_payload = await self._get_json(client, f"{pool_path}/projects", headers, auth)
-                payloads[f"projects:{pool_name}"] = projects_payload
-
-                for project in _items(projects_payload, "projects"):
-                    project_name = _string(project.get("name"))
-                    if not project_name:
-                        continue
-                    project_path = f"{pool_path}/projects/{_quote(project_name)}"
-                    payloads[f"project:{pool_name}/{project_name}"] = await self._get_json(
-                        client,
-                        project_path,
-                        headers,
-                        auth,
-                    )
-                    payloads[f"filesystems:{pool_name}/{project_name}"] = await self._get_json(
-                        client,
-                        f"{project_path}/filesystems",
-                        headers,
-                        auth,
-                    )
-                    payloads[f"luns:{pool_name}/{project_name}"] = await self._get_json(
-                        client,
-                        f"{project_path}/luns",
-                        headers,
-                        auth,
-                    )
-
-        return payloads
-
-    async def _get_json(
-        self,
-        client: httpx.AsyncClient,
-        endpoint: str,
-        headers: dict[str, str],
-        auth: tuple[str, str] | None,
-    ) -> Any:
-        response = await client.get(self._url(endpoint), headers=headers, auth=auth)
-        response.raise_for_status()
-        return response.json() if response.content else {}
-
-    def _url(self, endpoint: str) -> str:
-        base_url = f"{self.config.base_url.rstrip('/')}/"
-        return urljoin(base_url, endpoint.lstrip("/"))
-
-    def _publish_metrics(self, summary: dict[str, Any], pools: list[dict[str, Any]]) -> None:
-        device_name = str(summary.get("device_name") or self.name)
-
-        ZFS_API_UP.labels(device_name).set(1)
-        ZFS_ALERT_COUNT.labels(device_name, "alert").set(summary.get("alert_count", 0))
-        ZFS_ALERT_COUNT.labels(device_name, "fault").set(summary.get("fault_count", 0))
-
-        for pool in pools:
-            pool_name = str(pool.get("name") or "unknown")
-            ZFS_POOL_STATUS.labels(device_name, pool_name).set(pool.get("up", 0))
-            used_percent = pool.get("used_percent")
-            if used_percent is not None:
-                ZFS_CAPACITY_USED_PERCENT.labels(device_name, pool_name).set(used_percent)
 
 
 def parse_zfs_rest_payload(payloads: dict[str, Any], fallback_name: str) -> dict[str, Any]:
@@ -303,10 +188,6 @@ def _first_mapping(payload: Any, key: str) -> dict[str, Any]:
     if isinstance(payload, dict) and isinstance(payload.get(key), dict):
         return payload[key]
     return {}
-
-
-def _quote(value: str) -> str:
-    return quote(value, safe="")
 
 
 def _used_percent(used: float | None, total: float | None) -> float | None:

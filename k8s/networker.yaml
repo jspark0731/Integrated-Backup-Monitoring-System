@@ -23,7 +23,10 @@ data:
         type: Networker
         protocol: rest
         enabled: true
-        schedule_second: 30
+        schedule:
+          interval_minutes: 5
+          minute_offset: 3
+          second: 0
         base_url: networker_core_base_url_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/networker/networker-core-token
@@ -34,7 +37,10 @@ data:
         type: Networker
         protocol: rest
         enabled: true
-        schedule_second: 30
+        schedule:
+          interval_minutes: 5
+          minute_offset: 3
+          second: 0
         base_url: networker_chnl_base_url_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/networker/networker-chnl-token
@@ -45,7 +51,10 @@ data:
         type: Networker
         protocol: rest
         enabled: true
-        schedule_second: 30
+        schedule:
+          interval_minutes: 5
+          minute_offset: 3
+          second: 0
         base_url: networker_info_base_url_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/networker/networker-info-token
@@ -56,7 +65,10 @@ data:
         type: Networker
         protocol: rest
         enabled: true
-        schedule_second: 30
+        schedule:
+          interval_minutes: 5
+          minute_offset: 3
+          second: 0
         base_url: networker_ifrs_base_url_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/networker/networker-ifrs-token

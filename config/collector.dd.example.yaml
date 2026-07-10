@@ -16,7 +16,10 @@ collectors:
     type: DD
     protocol: snmp
     enabled: true
-    schedule_second: 0
+    schedule:
+      interval_minutes: 5
+      minute_offset: 1
+      second: 0
     host: DD4500_host_TO_BE_FILLED
     port: 161
     community: DD4500_community_TO_BE_FILLED
@@ -30,7 +33,10 @@ collectors:
     type: DD
     protocol: snmp
     enabled: true
-    schedule_second: 0
+    schedule:
+      interval_minutes: 5
+      minute_offset: 1
+      second: 0
     host: DD6900_1_host_TO_BE_FILLED
     port: 161
     community: DD6900_1_community_TO_BE_FILLED
@@ -44,7 +50,10 @@ collectors:
     type: DD
     protocol: snmp
     enabled: true
-    schedule_second: 0
+    schedule:
+      interval_minutes: 5
+      minute_offset: 1
+      second: 0
     host: DD6900_2_host_TO_BE_FILLED
     port: 161
     community: DD6900_2_community_TO_BE_FILLED
