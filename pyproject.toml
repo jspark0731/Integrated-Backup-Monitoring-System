@@ -45,6 +45,9 @@ dev = [
 [project.scripts]
 backup-collector-api = "app.main:run"
 
+[tool.setuptools]
+packages = ["app"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
