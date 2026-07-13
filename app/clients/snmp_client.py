@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 from app.core.config import CollectorConfig
 
 
@@ -8,49 +11,48 @@ class SnmpClient:
         self.config = config
 
     def collect_values(self) -> dict:
-        from pysnmp.hlapi import (
+        return asyncio.run(self._collect_values())
+
+    async def _collect_values(self) -> dict:
+        from pysnmp.hlapi.v3arch.asyncio import (
             CommunityData,
             ContextData,
             ObjectIdentity,
             ObjectType,
             SnmpEngine,
             UdpTransportTarget,
-            getCmd,
-            nextCmd,
+            get_cmd,
+            walk_cmd,
         )
 
         mp_model = 0 if self.config.version == "1" else 1
         values = {}
 
         for metric_name, oid in self.config.oids.items():
-            iterator = getCmd(
+            error_indication, error_status, error_index, var_binds = await get_cmd(
                 SnmpEngine(),
                 CommunityData(self.config.community, mpModel=mp_model),
-                UdpTransportTarget(
+                await UdpTransportTarget.create(
                     (self.config.host, self.config.snmp_port or self.config.port),
                     timeout=self.config.timeout_seconds,
                     retries=self.config.retries,
                 ),
                 ContextData(),
                 ObjectType(ObjectIdentity(oid)),
+                lookupMib=False,
             )
-            error_indication, error_status, error_index, var_binds = next(iterator)
 
-            if error_indication:
-                raise RuntimeError(str(error_indication))
-            if error_status:
-                failing_oid = var_binds[int(error_index) - 1][0] if error_index else "unknown"
-                raise RuntimeError(f"{error_status.prettyPrint()} at {failing_oid}")
+            self._raise_on_error(error_indication, error_status, error_index, var_binds)
 
             for _, value in var_binds:
                 values[metric_name] = value.prettyPrint()
 
         for metric_name, base_oid in self.config.walk_oids.items():
-            values[metric_name] = self._walk_oid(
-                next_cmd=nextCmd,
+            values[metric_name] = await self._walk_oid(
+                walk_cmd=walk_cmd,
                 snmp_engine=SnmpEngine(),
                 community_data=CommunityData(self.config.community, mpModel=mp_model),
-                transport_target=UdpTransportTarget(
+                transport_target=await UdpTransportTarget.create(
                     (self.config.host, self.config.snmp_port or self.config.port),
                     timeout=self.config.timeout_seconds,
                     retries=self.config.retries,
@@ -63,9 +65,9 @@ class SnmpClient:
         return values
 
     @staticmethod
-    def _walk_oid(
+    async def _walk_oid(
         *,
-        next_cmd,
+        walk_cmd,
         snmp_engine,
         community_data,
         transport_target,
@@ -74,21 +76,18 @@ class SnmpClient:
         base_oid: str,
     ) -> list[dict[str, str]]:
         rows = []
-        iterator = next_cmd(
+        iterator = walk_cmd(
             snmp_engine,
             community_data,
             transport_target,
             context_data,
             object_type,
             lexicographicMode=False,
+            lookupMib=False,
         )
 
-        for error_indication, error_status, error_index, var_binds in iterator:
-            if error_indication:
-                raise RuntimeError(str(error_indication))
-            if error_status:
-                failing_oid = var_binds[int(error_index) - 1][0] if error_index else "unknown"
-                raise RuntimeError(f"{error_status.prettyPrint()} at {failing_oid}")
+        async for error_indication, error_status, error_index, var_binds in iterator:
+            SnmpClient._raise_on_error(error_indication, error_status, error_index, var_binds)
 
             for oid, value in var_binds:
                 oid_text = oid.prettyPrint()
@@ -101,6 +100,31 @@ class SnmpClient:
                 )
 
         return rows
+
+    @staticmethod
+    def _raise_on_error(error_indication: Any, error_status: Any, error_index: Any, var_binds: Any) -> None:
+        if error_indication:
+            raise RuntimeError(str(error_indication))
+        if error_status:
+            failing_oid = SnmpClient._failing_oid(error_index, var_binds)
+            error_text = error_status.prettyPrint() if hasattr(error_status, "prettyPrint") else str(error_status)
+            raise RuntimeError(f"{error_text} at {failing_oid}")
+
+    @staticmethod
+    def _failing_oid(error_index: Any, var_binds: Any) -> str:
+        try:
+            index = int(error_index)
+        except (TypeError, ValueError):
+            return "unknown"
+
+        if index <= 0:
+            return "unknown"
+
+        try:
+            failing_bind = var_binds[index - 1]
+            return str(failing_bind[0])
+        except (IndexError, TypeError, KeyError):
+            return "unknown"
 
     @staticmethod
     def _instance_from_oid(base_oid: str, oid: str) -> str:
