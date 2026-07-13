@@ -119,9 +119,20 @@ pools, pool details, projects, filesystems, LUNs, alert logs, and fault logs.
 
 ## Storage
 
-Elasticsearch receives the full collection document, including raw payloads.
-Prometheus receives collector health metrics plus normalized DXi, DD, and i6000
-gauges when the collectors can extract those values. NetWorker also publishes
-API reachability, job counts by policy, workflow counts, and client count. ZFS
-publishes API reachability, pool status, pool used capacity percent, and
-alert/fault counts.
+The collector uses a hybrid ETL/ELT storage model.
+
+Elasticsearch receives two documents for every collection result:
+
+- `backup-raw-{solution}-YYYY.MM`: full raw collection payload for later ELT
+  processing and parser rework
+- `backup-current-{solution}-YYYY.MM`: thin current-state summary for
+  operational dashboards
+
+Prometheus receives the immediate ETL metrics needed for alerting and live
+panels: collector health, device up/down, capacity, status, job counts, and
+other lightweight gauges.
+
+Derived dashboard documents such as inventory snapshots, monthly reports,
+client diffs, SLA summaries, and Top N failure views should be built later from
+the raw indexes. The `app.processors` package contains the first pure
+transformation helpers for that ELT layer.

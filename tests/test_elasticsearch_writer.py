@@ -2,10 +2,11 @@ from datetime import datetime, timezone
 
 from app.core.config import ElasticsearchConfig
 from app.models import CollectionResult
+from app.processors.derived import build_derived_documents
 from app.writers.elasticsearch import ElasticsearchWriter
 
 
-def test_dxi_cli_snmp_results_use_summary_index() -> None:
+def test_result_writes_raw_and_current_documents() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     result = CollectionResult(
         collector="DXi_1",
@@ -13,87 +14,86 @@ def test_dxi_cli_snmp_results_use_summary_index() -> None:
         protocol="cli_snmp",
         collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
         ok=True,
+        payload={"summary": {"device_name": "DXi_1"}},
     )
 
-    assert writer._index_name(result).startswith("backup-dxi-summary-")
+    actions = writer._actions_for_result(result)
+
+    assert len(actions) == 2
+    assert actions[0]["_index"] == "backup-raw-dxi-2026.06"
+    assert actions[0]["_source"]["processing_mode"] == "elt"
+    assert actions[0]["_source"]["document_family"] == "raw"
+    assert actions[0]["_source"]["raw_document_id"] == actions[0]["_id"]
+    assert actions[1]["_index"] == "backup-current-dxi-2026.06"
+    assert actions[1]["_id"] == "DXi_1:current"
+    assert actions[1]["_source"]["current_document_id"] == "DXi_1:current"
+    assert actions[1]["_source"]["processing_mode"] == "etl"
+    assert actions[1]["_source"]["summary"]["device_name"] == "DXi_1"
 
 
-def test_dd_snmp_results_use_status_index() -> None:
+def test_raw_document_ids_keep_collection_history() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     result = CollectionResult(
         collector="DD4500",
         target_type="DD",
         protocol="snmp",
-        collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
-        ok=True,
-    )
-
-    assert writer._index_name(result).startswith("backup-dashboard-")
-
-
-def test_i6000_rest_results_expand_to_status_drive_media_indexes() -> None:
-    writer = ElasticsearchWriter(ElasticsearchConfig())
-    result = CollectionResult(
-        collector="i6000_core_rest",
-        target_type="i6000",
-        protocol="rest",
-        collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
+        collected_at=datetime(2026, 6, 29, 12, 30, 1, tzinfo=timezone.utc),
         ok=True,
     )
 
     actions = writer._actions_for_result(result)
 
-    assert len(actions) == 3
-    assert actions[0]["_index"].startswith("backup-i6000-status-")
-    assert actions[1]["_index"].startswith("backup-i6000-drive-")
-    assert actions[2]["_index"].startswith("backup-i6000-media-")
+    assert actions[0]["_id"].startswith("DD4500:raw:20260629T123001.")
+    assert actions[0]["_index"] == "backup-raw-dd-2026.06"
+    assert actions[1]["_index"] == "backup-current-dd-2026.06"
 
 
-def test_networker_rest_results_expand_to_domain_indexes() -> None:
-    writer = ElasticsearchWriter(ElasticsearchConfig())
-    result = CollectionResult(
-        collector="networker_core",
-        target_type="Networker",
-        protocol="rest",
-        collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
-        ok=True,
-        payload={
+def test_networker_raw_document_can_be_transformed_to_derived_documents() -> None:
+    raw_document = {
+        "_id": "networker_core:raw:20260629T000000.000000Z",
+        "@timestamp": "2026-06-29T00:00:00+00:00",
+        "collector": "networker_core",
+        "target_type": "Networker",
+        "solution": "networker",
+        "protocol": "rest",
+        "payload": {
             "jobs": [{"job_id": 1}],
             "clients": [{"client_name": "client01"}],
             "policies": [{"policy_name": "Bronze"}],
             "workflows": [{"workflow_name": "Filesystem"}],
-            "monthly_report": [{"policy_name": "Bronze"}],
+            "monthly_report": [{"policy_name": "Bronze", "month": "2026-06"}],
         },
-    )
+    }
 
-    actions = writer._actions_for_result(result)
+    documents = build_derived_documents(raw_document)
 
-    assert len(actions) == 5
-    assert actions[0]["_index"].startswith("backup-networker-job-")
-    assert actions[1]["_index"].startswith("backup-networker-client-")
-    assert actions[2]["_index"].startswith("backup-networker-policy-")
-    assert actions[3]["_index"].startswith("backup-networker-workflow-")
-    assert actions[4]["_index"].startswith("backup-networker-monthly-report-")
+    assert [document["document_type"] for document in documents] == [
+        "job",
+        "client",
+        "policy",
+        "workflow",
+        "monthly-report",
+    ]
+    assert documents[0]["processing_mode"] == "elt"
+    assert documents[0]["derived_id"] == "networker_core:job:1:2026-06"
 
 
-def test_zfs_rest_results_expand_to_domain_indexes() -> None:
-    writer = ElasticsearchWriter(ElasticsearchConfig())
-    result = CollectionResult(
-        collector="ZFS_1",
-        target_type="ZFS",
-        protocol="rest",
-        collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
-        ok=True,
-        payload={
+def test_zfs_raw_document_can_be_transformed_to_derived_documents() -> None:
+    raw_document = {
+        "_id": "ZFS_1:raw:20260629T000000.000000Z",
+        "@timestamp": "2026-06-29T00:00:00+00:00",
+        "collector": "ZFS_1",
+        "target_type": "ZFS",
+        "solution": "zfs",
+        "protocol": "rest",
+        "payload": {
             "summary": {"device_name": "zfs-prod-1"},
             "pools": [{"name": "p1"}],
             "alerts": [{"summary": "Disk fault"}],
         },
-    )
+    }
 
-    actions = writer._actions_for_result(result)
+    documents = build_derived_documents(raw_document)
 
-    assert len(actions) == 3
-    assert actions[0]["_index"].startswith("backup-zfs-summary-")
-    assert actions[1]["_index"].startswith("backup-zfs-pool-")
-    assert actions[2]["_index"].startswith("backup-zfs-status-")
+    assert [document["document_type"] for document in documents] == ["summary", "pool", "event"]
+    assert documents[1]["derived_id"] == "ZFS_1:pool:p1:2026-06"

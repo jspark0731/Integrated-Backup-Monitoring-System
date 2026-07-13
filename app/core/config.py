@@ -60,6 +60,8 @@ class CollectorConfig:
     ssh_port: int | None = None
     community: str | None = None
     version: str = "2c"
+    timeout_seconds: int = 5
+    retries: int = 1
     oids: dict[str, str] = field(default_factory=dict)
     walk_oids: dict[str, str] = field(default_factory=dict)
     base_url: str | None = None
@@ -231,6 +233,8 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         ssh_port=int(raw["ssh_port"]) if raw.get("ssh_port") is not None else None,
         community=_optional_secret(raw, "community"),
         version=str(raw.get("version", "2c")),
+        timeout_seconds=int(raw.get("timeout_seconds", 5)),
+        retries=int(raw.get("retries", 1)),
         oids=dict(raw.get("oids", {})),
         walk_oids=dict(raw.get("walk_oids", {})),
         base_url=_optional(raw.get("base_url")),

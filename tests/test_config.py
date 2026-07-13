@@ -19,6 +19,13 @@ def test_default_schedule_second_is_zero() -> None:
     assert default_second("ZFS") == 0
 
 
+def test_snmp_timeout_and_retries_have_defaults() -> None:
+    config = load_config(Path("config/collector.dd.example.yaml"))
+
+    assert config.collectors[0].timeout_seconds == 5
+    assert config.collectors[0].retries == 1
+
+
 def test_to_be_filled_is_detected() -> None:
     assert has_unfilled_values({"host": "TO_BE_FILLED"})
     assert has_unfilled_values({"host": "DXi_1_host_TO_BE_FILLED"})

@@ -26,7 +26,11 @@ class SnmpClient:
             iterator = getCmd(
                 SnmpEngine(),
                 CommunityData(self.config.community, mpModel=mp_model),
-                UdpTransportTarget((self.config.host, self.config.snmp_port or self.config.port), timeout=5, retries=1),
+                UdpTransportTarget(
+                    (self.config.host, self.config.snmp_port or self.config.port),
+                    timeout=self.config.timeout_seconds,
+                    retries=self.config.retries,
+                ),
                 ContextData(),
                 ObjectType(ObjectIdentity(oid)),
             )
@@ -48,8 +52,8 @@ class SnmpClient:
                 community_data=CommunityData(self.config.community, mpModel=mp_model),
                 transport_target=UdpTransportTarget(
                     (self.config.host, self.config.snmp_port or self.config.port),
-                    timeout=5,
-                    retries=1,
+                    timeout=self.config.timeout_seconds,
+                    retries=self.config.retries,
                 ),
                 context_data=ContextData(),
                 object_type=ObjectType(ObjectIdentity(base_oid)),

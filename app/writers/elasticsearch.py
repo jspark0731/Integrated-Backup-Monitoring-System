@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
 from typing import Any
 
@@ -50,104 +49,76 @@ class ElasticsearchWriter:
             await self.client.close()
 
     def _actions_for_result(self, result: CollectionResult) -> list[dict]:
-        if result.target_type == "i6000" and result.protocol == "rest":
-            return [
-                {
-                    "_index": self._index_name(result, document_type),
-                    "_source": result.to_document() | {"document_type": document_type},
-                }
-                for document_type in ("status", "drive", "media")
-            ]
-        if result.target_type == "Networker" and result.protocol == "rest":
-            actions = []
-            for document_type, payload_key in (
-                ("job", "jobs"),
-                ("client", "clients"),
-                ("policy", "policies"),
-                ("workflow", "workflows"),
-                ("monthly-report", "monthly_report"),
-            ):
-                records = result.payload.get(payload_key) if result.payload else None
-                if not isinstance(records, list):
-                    continue
-                for record in records:
-                    actions.append(
-                        {
-                            "_index": self._index_name(result, document_type),
-                            "_source": result.to_document()
-                            | {
-                                "document_type": document_type,
-                                "payload": record,
-                            },
-                        }
-                    )
-            if actions:
-                return actions
-        if result.target_type == "ZFS" and result.protocol == "rest":
-            actions = []
-            summary = result.payload.get("summary") if result.payload else None
-            if isinstance(summary, dict):
-                actions.append(
-                    {
-                        "_index": self._index_name(result, "summary"),
-                        "_source": result.to_document()
-                        | {
-                            "document_type": "summary",
-                            "payload": summary,
-                        },
-                    }
-                )
-            for document_type, payload_key in (
-                ("pool", "pools"),
-                ("status", "alerts"),
-            ):
-                records = result.payload.get(payload_key) if result.payload else None
-                if not isinstance(records, list):
-                    continue
-                for record in records:
-                    actions.append(
-                        {
-                            "_index": self._index_name(result, document_type),
-                            "_source": result.to_document()
-                            | {
-                                "document_type": document_type,
-                                "payload": record,
-                            },
-                        }
-                    )
-            if actions:
-                return actions
         return [
             {
-                "_index": self._index_name(result),
-                "_source": result.to_document(),
-            }
+                "_op_type": "index",
+                "_index": self._index_name(result, "raw"),
+                "_id": self._raw_document_id(result),
+                "_source": self._raw_document(result),
+            },
+            {
+                "_op_type": "index",
+                "_index": self._index_name(result, "current"),
+                "_id": self._current_document_id(result),
+                "_source": self._current_document(result),
+            },
         ]
 
     def _index_name(self, result: CollectionResult | None = None, document_type: str | None = None) -> str:
-        if result and result.target_type == "DXi":
-            month_suffix = datetime.now(timezone.utc).strftime("%Y.%m")
-            if result.protocol in {"ssh", "cli", "cli_snmp"}:
-                return f"backup-dxi-summary-{month_suffix}"
-            return f"backup-dxi-status-{month_suffix}"
+        if result and document_type in {"raw", "current"}:
+            month_suffix = result.collected_at.strftime("%Y.%m")
+            return f"backup-{document_type}-{self._solution(result)}-{month_suffix}"
 
-        if result and result.target_type == "i6000":
-            month_suffix = datetime.now(timezone.utc).strftime("%Y.%m")
-            if result.protocol == "rest" and document_type:
-                return f"backup-i6000-{document_type}-{month_suffix}"
-            return f"backup-i6000-status-{month_suffix}"
+        if result:
+            month_suffix = result.collected_at.strftime("%Y.%m")
+            return f"{self.config.index_prefix}-{self._solution(result)}-{month_suffix}"
 
-        if result and result.target_type == "Networker":
-            month_suffix = datetime.now(timezone.utc).strftime("%Y.%m")
-            if result.protocol == "rest" and document_type:
-                return f"backup-networker-{document_type}-{month_suffix}"
-            return f"backup-networker-status-{month_suffix}"
+        return self.config.index_prefix
 
-        if result and result.target_type == "ZFS":
-            month_suffix = datetime.now(timezone.utc).strftime("%Y.%m")
-            if result.protocol == "rest" and document_type:
-                return f"backup-zfs-{document_type}-{month_suffix}"
-            return f"backup-zfs-status-{month_suffix}"
+    def _raw_document(self, result: CollectionResult) -> dict:
+        document = result.to_document()
+        return document | {
+            "raw_document_id": self._raw_document_id(result),
+            "solution": self._solution(result),
+            "document_family": "raw",
+            "document_type": "collection",
+            "processing_mode": "elt",
+        }
 
-        date_suffix = datetime.now(timezone.utc).strftime("%Y.%m.%d")
-        return f"{self.config.index_prefix}-{date_suffix}"
+    def _current_document(self, result: CollectionResult) -> dict:
+        payload = result.payload or {}
+        summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+        return {
+            "@timestamp": result.to_document()["@timestamp"],
+            "current_document_id": self._current_document_id(result),
+            "collector": result.collector,
+            "target_type": result.target_type,
+            "solution": self._solution(result),
+            "protocol": result.protocol,
+            "ok": result.ok,
+            "error": result.error,
+            "skipped": result.skipped,
+            "skip_reason": result.skip_reason,
+            "document_family": "current",
+            "document_type": "status",
+            "processing_mode": "etl",
+            "summary": summary,
+        }
+
+    def _raw_document_id(self, result: CollectionResult) -> str:
+        timestamp = result.collected_at.strftime("%Y%m%dT%H%M%S.%fZ")
+        return f"{result.collector}:raw:{timestamp}"
+
+    def _current_document_id(self, result: CollectionResult) -> str:
+        return f"{result.collector}:current"
+
+    @staticmethod
+    def _solution(result: CollectionResult) -> str:
+        aliases = {
+            "DD": "dd",
+            "DXi": "dxi",
+            "i6000": "i6000",
+            "Networker": "networker",
+            "ZFS": "zfs",
+        }
+        return aliases.get(result.target_type, result.target_type.lower())
