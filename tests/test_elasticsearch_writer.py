@@ -20,11 +20,11 @@ def test_result_writes_raw_and_current_documents() -> None:
     actions = writer._actions_for_result(result)
 
     assert len(actions) == 2
-    assert actions[0]["_index"] == "backup-raw-dxi-2026.06"
+    assert actions[0]["_index"] == "VTL-DXI_1-2026-06-29-1"
     assert actions[0]["_source"]["processing_mode"] == "elt"
     assert actions[0]["_source"]["document_family"] == "raw"
     assert actions[0]["_source"]["raw_document_id"] == actions[0]["_id"]
-    assert actions[1]["_index"] == "backup-current-dxi-2026.06"
+    assert actions[1]["_index"] == "VTL-DXI_1-2026-06-29-1"
     assert actions[1]["_id"] == "DXi_1:current"
     assert actions[1]["_source"]["current_document_id"] == "DXi_1:current"
     assert actions[1]["_source"]["processing_mode"] == "etl"
@@ -44,8 +44,39 @@ def test_raw_document_ids_keep_collection_history() -> None:
     actions = writer._actions_for_result(result)
 
     assert actions[0]["_id"].startswith("DD4500:raw:20260629T123001.")
-    assert actions[0]["_index"] == "backup-raw-dd-2026.06"
-    assert actions[1]["_index"] == "backup-current-dd-2026.06"
+    assert actions[0]["_index"] == "VTL-DD4500-2026-06-29-1"
+    assert actions[1]["_index"] == "VTL-DD4500-2026-06-29-1"
+
+
+def test_index_names_follow_target_specific_design() -> None:
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+    collected_at = datetime(2026, 6, 29, tzinfo=timezone.utc)
+    cases = [
+        ("DXi_2", "DXi", "cli_snmp", "VTL-DXI_2-2026-06-29-1"),
+        ("DD6900_1", "DD", "snmp", "VTL-DD6900_1-2026-06-29-1"),
+        ("DD6900_2", "DD", "snmp", "VTL-DD6900_2-2026-06-29-1"),
+        ("i6000_core_rest", "i6000", "rest", "PTL-CORE-2026-06-29-1"),
+        ("i6000_chnl_rest", "i6000", "rest", "PTL-CHNL-2026-06-29-1"),
+        ("i6000_info_rest", "i6000", "rest", "PTL-INFO-2026-06-29-1"),
+        ("i6000_ifrs_rest", "i6000", "rest", "PTL-IFRS-2026-06-29-1"),
+        ("ZFS_1", "ZFS", "rest", "ZFS-1-2026-06-29-1"),
+        ("ZFS_4", "ZFS", "rest", "ZFS-4-2026-06-29-1"),
+        ("networker_core", "Networker", "rest", "NW-CORE-2026-06-29-1"),
+        ("networker_chnl", "Networker", "rest", "NW-CHNL-2026-06-29-1"),
+        ("networker_info", "Networker", "rest", "NW-INFO-2026-06-29-1"),
+        ("networker_ifrs", "Networker", "rest", "NW-IFRS-2026-06-29-1"),
+    ]
+
+    for collector, target_type, protocol, expected_index in cases:
+        result = CollectionResult(
+            collector=collector,
+            target_type=target_type,
+            protocol=protocol,
+            collected_at=collected_at,
+            ok=True,
+        )
+
+        assert writer._index_name(result) == expected_index
 
 
 def test_networker_raw_document_can_be_transformed_to_derived_documents() -> None:

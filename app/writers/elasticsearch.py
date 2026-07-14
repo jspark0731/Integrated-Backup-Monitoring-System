@@ -9,6 +9,14 @@ from app.models import CollectionResult
 
 LOGGER = logging.getLogger(__name__)
 
+DEFAULT_INDEX_SEQUENCE = "1"
+SITE_ALIASES = {
+    "core": "CORE",
+    "chnl": "CHNL",
+    "info": "INFO",
+    "ifrs": "IFRS",
+}
+
 
 class ElasticsearchWriter:
     def __init__(self, config: ElasticsearchConfig) -> None:
@@ -65,13 +73,9 @@ class ElasticsearchWriter:
         ]
 
     def _index_name(self, result: CollectionResult | None = None, document_type: str | None = None) -> str:
-        if result and document_type in {"raw", "current"}:
-            month_suffix = result.collected_at.strftime("%Y.%m")
-            return f"backup-{document_type}-{self._solution(result)}-{month_suffix}"
-
         if result:
-            month_suffix = result.collected_at.strftime("%Y.%m")
-            return f"{self.config.index_prefix}-{self._solution(result)}-{month_suffix}"
+            date_suffix = result.collected_at.strftime("%Y-%m-%d")
+            return f"{self._index_family(result)}-{self._index_segment(result)}-{date_suffix}-{DEFAULT_INDEX_SEQUENCE}"
 
         return self.config.index_prefix
 
@@ -122,3 +126,36 @@ class ElasticsearchWriter:
             "ZFS": "zfs",
         }
         return aliases.get(result.target_type, result.target_type.lower())
+
+    @staticmethod
+    def _index_family(result: CollectionResult) -> str:
+        aliases = {
+            "DD": "VTL",
+            "DXi": "VTL",
+            "i6000": "PTL",
+            "Networker": "NW",
+            "ZFS": "ZFS",
+        }
+        return aliases.get(result.target_type, result.target_type.upper())
+
+    @staticmethod
+    def _index_segment(result: CollectionResult) -> str:
+        collector = result.collector.strip()
+        target_type = result.target_type
+
+        if target_type in {"DD", "DXi"}:
+            return collector.upper()
+        if target_type == "ZFS":
+            return collector.upper().removeprefix("ZFS_")
+        if target_type in {"i6000", "Networker"}:
+            return _site_segment(collector)
+
+        return collector.upper()
+
+
+def _site_segment(collector: str) -> str:
+    normalized = collector.lower().replace("-", "_")
+    for token, segment in SITE_ALIASES.items():
+        if token in normalized.split("_"):
+            return segment
+    return collector.upper()
