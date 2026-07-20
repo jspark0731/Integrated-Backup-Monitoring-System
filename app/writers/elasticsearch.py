@@ -32,6 +32,7 @@ class ElasticsearchWriter:
                 hosts=list(config.hosts),
                 basic_auth=basic_auth,
                 verify_certs=config.verify_certs,
+                ca_certs=config.ca_certs,
             )
             self._async_bulk = async_bulk
         elif config.enabled:

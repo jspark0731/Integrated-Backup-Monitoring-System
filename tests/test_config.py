@@ -107,6 +107,7 @@ elasticsearch:
   enabled: true
   username_file: {es_username}
   password_file: {es_password}
+  ca_certs: /app/secrets/elasticsearch/ca.crt
 collectors:
   - name: DXi_1
     type: DXi
@@ -128,6 +129,7 @@ collectors:
 
     assert config.elasticsearch.username == "elastic"
     assert config.elasticsearch.password == "elastic-password"
+    assert config.elasticsearch.ca_certs == "/app/secrets/elasticsearch/ca.crt"
     assert config.collectors[0].community == "public"
     assert config.collectors[0].username == "dxi-user"
     assert config.collectors[0].password == "dxi-password"

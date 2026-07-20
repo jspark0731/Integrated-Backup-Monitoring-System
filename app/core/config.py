@@ -40,6 +40,7 @@ class ElasticsearchConfig:
     username: str | None = None
     password: str | None = None
     verify_certs: bool = True
+    ca_certs: str | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -215,6 +216,7 @@ def _parse_elasticsearch(raw: dict[str, Any]) -> ElasticsearchConfig:
         username=_optional_secret(raw, "username"),
         password=_optional_secret(raw, "password"),
         verify_certs=bool(raw.get("verify_certs", True)),
+        ca_certs=raw.get("ca_certs"),
     )
 
 

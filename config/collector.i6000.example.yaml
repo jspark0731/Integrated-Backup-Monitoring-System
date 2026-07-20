@@ -5,11 +5,12 @@ app:
 elasticsearch:
   enabled: false
   hosts:
-    - http://elasticsearch:9200
+    - https://elasticsearch:9200
   index_prefix: backup-dashboard
   username: elasticsearch_username_TO_BE_FILLED
   password: elasticsearch_password_TO_BE_FILLED
   verify_certs: true
+  ca_certs: /app/secrets/elasticsearch/ca.crt
 
 collectors:
   - name: i6000_core_rest

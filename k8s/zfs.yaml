@@ -13,11 +13,12 @@ data:
     elasticsearch:
       enabled: false
       hosts:
-        - http://elasticsearch:9200
+        - https://elasticsearch:9200
       index_prefix: backup-dashboard
       username_file: /app/secrets/elasticsearch/username
       password_file: /app/secrets/elasticsearch/password
       verify_certs: true
+      ca_certs: /app/secrets/elasticsearch/ca.crt
     collectors:
       - name: ZFS_1
         type: ZFS
@@ -147,6 +148,8 @@ spec:
                 path: elasticsearch/username
               - key: elasticsearch-password
                 path: elasticsearch/password
+              - key: elasticsearch-ca.crt
+                path: elasticsearch/ca.crt
               - key: zfs-1-token
                 path: zfs/zfs-1-token
               - key: zfs-1-username
