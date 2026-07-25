@@ -123,16 +123,19 @@ The collector uses a hybrid ETL/ELT storage model.
 
 Elasticsearch receives two documents for every collection result:
 
-- `backup-raw-{solution}-YYYY.MM`: full raw collection payload for later ELT
-  processing and parser rework
-- `backup-current-{solution}-YYYY.MM`: thin current-state summary for
-  operational dashboards
+- target-specific raw/current documents containing the full collection payload
+  and latest summary
+- for NetWorker, backup-operator-only `NW-OPS-RAW-*` and `NW-OPS-CURRENT-*`
+  documents plus hostname-classified entity documents such as
+  `NW-CORE-JOB-2026-07` and `NW-CHNL-CLIENT-2026-07`
 
 Prometheus receives the immediate ETL metrics needed for alerting and live
 panels: collector health, device up/down, capacity, status, job counts, and
 other lightweight gauges.
 
-Derived dashboard documents such as inventory snapshots, monthly reports,
-client diffs, SLA summaries, and Top N failure views should be built later from
-the raw indexes. The `app.processors` package contains the first pure
-transformation helpers for that ELT layer.
+NetWorker job, client, policy, workflow, and monthly-report documents are
+classified with `config/hostname_domain.example.csv` and written to
+security-domain/entity indexes. Other derived dashboard documents such as
+inventory snapshots, client diffs, SLA summaries, and Top N failure views can
+be built later from raw indexes with the transformation helpers in
+`app.processors`.

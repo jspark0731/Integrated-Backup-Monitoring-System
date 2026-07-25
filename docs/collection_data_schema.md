@@ -27,9 +27,9 @@ DD / DXi / i6000 / NetWorker / ZFS
   scrape한다.
 - Collector가 Grafana로 데이터를 직접 push하지는 않는다. Grafana가 두
   datasource를 각각 조회한다.
-- `app/processors/derived.py`에는 `raw` 문서를 엔티티 단위 `derived` 문서로
-  변환하는 모델이 있지만, 현재 `ElasticsearchWriter`의 저장 경로에는 연결되어
-  있지 않다.
+- NetWorker는 hostname CSV로 업무영역을 분류한 뒤 엔티티 단위 `derived`
+  문서를 영역별 인덱스에 저장한다. 다른 제품군의 derived 변환 모델은 아직
+  `ElasticsearchWriter` 저장 경로에 연결되어 있지 않다.
 
 ### 1.1 Datasource 역할
 
@@ -50,32 +50,41 @@ DD / DXi / i6000 / NetWorker / ZFS
 | Prometheus → Grafana | 인프라 설정 영역 | Grafana에 Prometheus datasource 등록 필요 |
 | Collector → Elasticsearch `raw` | 구현됨 | 정규화 payload와 원천 응답 저장 |
 | Collector → Elasticsearch `current` | 구현됨 | collector별 최신 summary 저장 |
-| `raw` → Elasticsearch `derived` | 변환 코드만 존재 | writer 또는 별도 처리 작업에 연결되지 않음 |
+| NetWorker `raw` → Elasticsearch `derived` | 구현됨 | 업무영역·엔티티별 인덱스에 저장 |
+| 기타 제품 `raw` → Elasticsearch `derived` | 변환 코드만 존재 | writer 또는 별도 처리 작업에 연결되지 않음 |
 | Elasticsearch → Grafana | 인프라 설정 영역 | Grafana에 인덱스 패턴별 datasource 등록 필요 |
 
-> 따라서 현재 코드만으로도 Elasticsearch를 Grafana datasource로 등록할 수
-> 있지만, Table/보고서 패널에 적합한 엔티티별 `derived` 문서는 아직 자동으로
-> 적재되지 않는다. 지금 상태에서는 `raw.payload.*` 또는 `current.summary.*`를
-> 직접 조회해야 한다.
+> NetWorker Table/보고서 패널은 영역별 derived 인덱스를 직접 사용할 수 있다.
+> i6000/ZFS 등의 엔티티별 derived 문서는 아직 자동 적재되지 않으므로
+> `raw.payload.*` 또는 `current.summary.*`를 직접 조회해야 한다.
 
 ## 2. Elasticsearch 인덱스
 
 ### 2.1 이름 규칙
 
-```text
-{FAMILY}-{SEGMENT}-{YYYY-MM-DD}-1
-```
+장비 데이터는 `{FAMILY}-{SEGMENT}-{YYYY-MM-DD}-1`, NetWorker 분류 데이터는
+별도의 월별 규칙을 사용한다.
 
 | 대상 | FAMILY | SEGMENT 규칙 | 예시 |
 |---|---|---|---|
 | DD | `VTL` | collector 이름 대문자 | `VTL-DD6900_1-2026-07-25-1` |
 | DXi | `VTL` | collector 이름 대문자 | `VTL-DXI_1-2026-07-25-1` |
 | i6000 | `PTL` | collector 이름의 사이트 토큰 | `PTL-CORE-2026-07-25-1` |
-| NetWorker | `NW` | collector 이름의 사이트 토큰 | `NW-CHNL-2026-07-25-1` |
 | ZFS | `ZFS` | 대문자화 후 `ZFS_` 제거 | `ZFS-1-2026-07-25-1` |
 
-사이트 토큰은 `core → CORE`, `chnl → CHNL`, `info → INFO`,
-`ifrs → IFRS`로 변환된다.
+**NetWorker 인덱스**
+
+| 데이터 | 이름 규칙 | 예시 | 접근 대상 |
+|---|---|---|---|
+| Raw | `NW-OPS-RAW-{SOURCE}-{YYYY-MM}` | `NW-OPS-RAW-CHNL-2026-07` | 백업 운영자 |
+| Current | `NW-OPS-CURRENT-{SOURCE}-{YYYY-MM}` | `NW-OPS-CURRENT-CHNL-2026-07` | 백업 운영자 |
+| Derived | `NW-{DOMAIN}-{ENTITY}-{YYYY-MM}` | `NW-CORE-JOB-2026-07` | 해당 업무영역 운영자 |
+
+`SOURCE`는 호출한 NetWorker 서버의 `core/chnl/info/ifrs`이고, `DOMAIN`은
+hostname CSV로 판정한 백업 대상 서버의 업무영역이다. 예를 들어 CHNL
+NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 문서의
+`source_networker`는 `chnl`이다. 미분류 문서는 `NW-UNMAPPED-{ENTITY}-*`에
+격리한다.
 
 ### 2.2 공통 타입 표기
 
@@ -160,7 +169,7 @@ collector별 최신 요약 상태를 제공한다. 문서 ID가 고정되어 같
 
 > 실패 또는 생략 결과에서는 payload가 비어 있으므로 `summary`는 `{}`이다.
 
-### 3.3 Derived 문서 — 변환 모델만 존재
+### 3.3 Derived 문서
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
@@ -174,6 +183,8 @@ collector별 최신 요약 상태를 제공한다. 문서 ID가 고정되어 같
 | `source_raw_id` | `string` | 원본 `_id` 또는 `raw_document_id` |
 | `record_id` | `string` | 엔티티 식별 필드 조합 |
 | `derived_id` | `string` | `{collector}:{document_type}:{record_id}:{YYYY-MM}` |
+| `source_networker` | `string nullable` | 원천 NetWorker 서버; NetWorker 문서에서 사용 |
+| `security_domain` | `string nullable` | CSV로 판정한 업무영역 |
 | `payload` | `object` | 해당 엔티티 레코드 |
 
 | 대상 | 생성 가능한 `document_type` | `record_id` 우선순위 |
@@ -322,6 +333,8 @@ payload
 | 필드 | 타입 |
 |---|---|
 | `server` | `string` |
+| `source_networker` | `string` |
+| `client_count_by_domain` | `object<string, integer>` |
 | `job_count`, `client_count`, `policy_count` | `integer` |
 | `workflow_count`, `backup_count`, `total_backup_bytes` | `integer` |
 | `job_success_count_by_policy` | `object<string, integer>` |
@@ -335,6 +348,8 @@ payload
 | 필드 | 타입 |
 |---|---|
 | `server` | `string` |
+| `source_networker`, `client_hostname`, `security_domain` | `string` |
+| `classification_status`, `classification_source` | `string` |
 | `job_id` | `any nullable` |
 | `name`, `type`, `state`, `status` | `string` |
 | `exit_code` | `integer nullable` |
@@ -349,6 +364,8 @@ payload
 | 필드 | 타입 |
 |---|---|
 | `server`, `client_id`, `client_name`, `client_os` | `string` |
+| `source_networker`, `client_hostname`, `security_domain` | `string` |
+| `classification_status`, `classification_source` | `string` |
 | `client_os_family` | `string` (`AIX`, `Linux`, `Windows`, `Other`, `Unknown`) |
 | `backup_type` | `string` |
 | `scheduled_backup`, `parallelism` | `any nullable` |
@@ -358,14 +375,15 @@ payload
 
 | 객체 | 필드 |
 |---|---|
-| `Policy` | `server`, `policy_name`, `comment`, `resource_id`: string; `workflow_count`: integer |
-| `Workflow` | `server`, `policy_name`, `workflow_name`: string; `enabled`: any; `action_count`: integer; `actions`: array<string>; `protection_groups`: array<any>; `start_time`, `end_time`: any |
+| `Policy` | `server`, `policy_name`, `comment`, `resource_id`, `source_networker`, `security_domain`: string; `workflow_count`: integer |
+| `Workflow` | `server`, `policy_name`, `workflow_name`, `source_networker`, `security_domain`: string; `enabled`: any; `action_count`: integer; `actions`: array<string>; `protection_groups`: array<any>; `start_time`, `end_time`: any |
 
 **Monthly Report**
 
 | 필드 | 타입 |
 |---|---|
 | `server`, `month`, `policy_name`, `workflow_name` | `string` |
+| `source_networker`, `security_domain`, `classification_status` | `string` |
 | `total_backup_bytes` | `integer` |
 | `total_backup_tb` | `number` |
 | `job_success_count`, `job_failed_count`, `job_running_count` | `integer` |
@@ -484,11 +502,11 @@ Counter는 노출 시 `_total` 이름을 유지하며 런타임에 `_created`가
 | 메트릭 | 타입 | 라벨 | 값 |
 |---|---|---|---|
 | `backup_networker_api_up` | Gauge | `server` | `1`=REST API 도달 가능 |
-| `backup_networker_job_success_count` | Gauge | `server,policy` | 성공 job 수 |
-| `backup_networker_job_failed_count` | Gauge | `server,policy` | 실패 job 수 |
-| `backup_networker_job_running_count` | Gauge | `server,policy` | 실행 중 job 수 |
-| `backup_networker_workflow_count` | Gauge | `server,policy` | workflow 수 |
-| `backup_networker_client_count` | Gauge | `server` | 고유 client 수 |
+| `backup_networker_job_success_count` | Gauge | `server,policy,security_domain` | 성공 job 수 |
+| `backup_networker_job_failed_count` | Gauge | `server,policy,security_domain` | 실패 job 수 |
+| `backup_networker_job_running_count` | Gauge | `server,policy,security_domain` | 실행 중 job 수 |
+| `backup_networker_workflow_count` | Gauge | `server,policy,security_domain` | workflow 수 |
+| `backup_networker_client_count` | Gauge | `server,security_domain` | 고유 client 수 |
 
 ### 5.6 ZFS
 
@@ -509,8 +527,17 @@ Grafana에서 대상별 인덱스 패턴을 datasource에 설정한다.
 |---|---|---|
 | DD / DXi | `VTL-*` | `@timestamp` |
 | i6000 | `PTL-*` | `@timestamp` |
-| NetWorker | `NW-*` | `@timestamp` |
+| NetWorker 기간계 | `NW-CORE-*` | `@timestamp` |
+| NetWorker 채널계 | `NW-CHNL-*` | `@timestamp` |
+| NetWorker 정보계 | `NW-INFO-*` | `@timestamp` |
+| NetWorker 대외계 | `NW-IFRS-*` | `@timestamp` |
+| NetWorker 백업 운영 | `NW-OPS-*`, `NW-UNMAPPED-*` | `@timestamp` |
 | ZFS | `ZFS-*` | `@timestamp` |
+
+영역별 Grafana datasource 계정에 적용할 Elasticsearch role 예시는
+`config/elasticsearch_roles.example.json`에 있다. 기간계 계정은
+`NW-CORE-*`만, 채널계 계정은 `NW-CHNL-*`만 읽을 수 있으며 장비 인덱스와
+`NW-OPS-*`는 백업 운영 계정만 읽도록 구성한다.
 
 모든 대상 인덱스를 하나의 datasource로 묶어야 한다면 `VTL-*,PTL-*,NW-*,ZFS-*`
 같은 멀티 패턴의 지원 여부를 Grafana/Elasticsearch 버전에서 확인하고,
@@ -522,16 +549,15 @@ Grafana에서 대상별 인덱스 패턴을 datasource에 설정한다.
 |---|---|---|
 | 최신 장비 상태 Table | `document_family:"current"` | `collector`, `target_type`, `ok`, `summary.*` |
 | 수집 실패 이력 Table | `document_family:"raw" AND ok:false` | `@timestamp`, `collector`, `error` |
-| NetWorker 최근 실패 job | `document_family:"raw" AND payload.jobs.status:"failed"` | `payload.jobs.*` |
+| NetWorker 최근 실패 job | `document_type:"job" AND payload.status:"failed"` | `payload.*` |
 | ZFS pool 목록 | `document_family:"raw" AND target_type:"ZFS"` | `payload.pools.*` |
 | 장비별 수집 건수 | `document_family:"raw"` | Terms=`collector`, Metric=`Count` |
 
-> 객체 배열인 `payload.jobs`, `payload.pools` 등을 Grafana Table에서 직접
-> 펼치는 방식은 제약이 있다. 운영용 Table 패널에는 `derived` 문서를 실제
-> 적재한 뒤 `document_type:"job"` 또는 `document_type:"pool"`처럼 조회하는
-> 모델이 더 적합하다.
+> NetWorker는 derived 문서를 실제 적재하므로 업무영역별 datasource에서 바로
+> 조회할 수 있다. 아직 derived 저장이 연결되지 않은 다른 제품의 객체 배열은
+> Grafana Table에서 직접 펼치는 데 제약이 있다.
 
-`derived` 적재가 연결된 이후의 권장 쿼리 형태:
+NetWorker derived 쿼리와 향후 다른 제품의 권장 쿼리 형태:
 
 ```text
 # NetWorker 실패 job Table
@@ -573,7 +599,8 @@ backup_networker_job_failed_count
 ## 7. 모델링 시 주의사항
 
 1. 원천 `raw` 객체는 장비 펌웨어/API 응답에 따라 필드와 타입이 달라질 수 있다.
-2. Elasticsearch에서 `raw`와 `current`가 같은 인덱스를 사용하므로
+2. NetWorker 이외 제품은 Elasticsearch에서 `raw`와 `current`가 같은
+   인덱스를 사용하므로
    Grafana Elasticsearch 쿼리에 `document_family` 필터를 항상 명시하는 것이
    안전하다.
 3. 일자가 바뀌면 새 인덱스에 새 `current` 문서가 생기므로 전체 기간 검색에서
