@@ -76,6 +76,10 @@ class CollectorConfig:
     commands: dict[str, str] = field(default_factory=dict)
     ssh_key_path: str | None = None
     command_timeout: int = 30
+    source_networker: str | None = None
+    hostname_csv_path: str | None = None
+    allowed_security_domains: tuple[str, ...] = ("core", "chnl", "info", "ifrs")
+    unmapped_security_domain: str = "unmapped"
 
     @property
     def effective_schedule(self) -> ScheduleConfig:
@@ -133,6 +137,12 @@ class CollectorConfig:
         elif self.type == "Networker":
             if self.endpoints:
                 required["endpoints"] = self.endpoints
+            required["source_networker"] = self.source_networker
+            required["hostname_csv_path"] = self.hostname_csv_path
+            if self.source_networker and self.source_networker.lower() not in {"core", "chnl", "info", "ifrs"}:
+                return f"unsupported source_networker: {self.source_networker}"
+            if self.hostname_csv_path and not Path(self.hostname_csv_path).is_file():
+                return f"hostname classification CSV does not exist: {self.hostname_csv_path}"
         elif self.type == "ZFS":
             if self.endpoints:
                 required["endpoints"] = self.endpoints
@@ -250,6 +260,18 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         commands=dict(raw.get("commands", {})),
         ssh_key_path=_optional(raw.get("ssh_key_path")),
         command_timeout=int(raw.get("command_timeout", 30)),
+        source_networker=_optional(raw.get("source_networker")),
+        hostname_csv_path=_optional((raw.get("classification") or {}).get("hostname_csv_path")),
+        allowed_security_domains=tuple(
+            str(value).strip().lower()
+            for value in (raw.get("classification") or {}).get(
+                "allowed_domains",
+                ("core", "chnl", "info", "ifrs"),
+            )
+        ),
+        unmapped_security_domain=str(
+            (raw.get("classification") or {}).get("unmapped_domain", "unmapped")
+        ).strip().lower(),
     )
 
 
@@ -328,4 +350,3 @@ def _optional_secret(raw: dict[str, Any], key: str) -> str | None:
 def is_unfilled_placeholder(value: str) -> bool:
     normalized = value.strip()
     return normalized == "" or normalized == TO_BE_FILLED or normalized.endswith(f"_{TO_BE_FILLED}")
-

@@ -4,14 +4,30 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
+from app.classifiers.hostname import HostnameClassifier
 
-def parse_networker_rest_payload(payloads: dict[str, Any], server_name: str) -> dict[str, Any]:
-    jobs = [_normalize_job(item, server_name) for item in _items(payloads.get("jobs"), "jobs")]
-    clients = [_normalize_client(item, server_name) for item in _items(payloads.get("clients"), "clients")]
+
+def parse_networker_rest_payload(
+    payloads: dict[str, Any],
+    server_name: str,
+    *,
+    source_networker: str | None = None,
+    classifier: HostnameClassifier | None = None,
+) -> dict[str, Any]:
+    source = (source_networker or server_name).strip().lower()
+    jobs = [_normalize_job(item, server_name, source) for item in _items(payloads.get("jobs"), "jobs")]
+    clients = [_normalize_client(item, server_name, source) for item in _items(payloads.get("clients"), "clients")]
     policies, workflows = _normalize_policies(payloads.get("policies"), server_name)
-    backups = [_normalize_backup(item, server_name) for item in _items(payloads.get("backups"), "backups")]
+    backups = [_normalize_backup(item, server_name, source) for item in _items(payloads.get("backups"), "backups")]
+
+    jobs = [_classify_record(item, classifier) for item in jobs]
+    clients = [_classify_record(item, classifier) for item in clients]
+    backups = [_classify_record(item, classifier) for item in backups]
+    policies, workflows = _classify_inventory(policies, workflows, jobs, backups, source)
 
     summary = _build_summary(server_name, jobs, clients, policies, workflows, backups)
+    summary["source_networker"] = source
+    summary["client_count_by_domain"] = dict(Counter(client["security_domain"] for client in clients))
 
     return {
         "summary": summary,
@@ -23,7 +39,7 @@ def parse_networker_rest_payload(payloads: dict[str, Any], server_name: str) -> 
     }
 
 
-def _normalize_job(item: dict[str, Any], server: str) -> dict[str, Any]:
+def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:
     state = _string(item.get("state"))
     exit_code = _int(item.get("exitCode"))
     status = _job_status(state, exit_code)
@@ -31,6 +47,7 @@ def _normalize_job(item: dict[str, Any], server: str) -> dict[str, Any]:
 
     return {
         "server": server,
+        "source_networker": source_networker,
         "job_id": item.get("id"),
         "name": _string(item.get("name")),
         "type": _string(item.get("type")),
@@ -49,7 +66,7 @@ def _normalize_job(item: dict[str, Any], server: str) -> dict[str, Any]:
     }
 
 
-def _normalize_client(item: dict[str, Any], server: str) -> dict[str, Any]:
+def _normalize_client(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:
     hostname = _string(item.get("hostname")) or _string(item.get("name"))
     os_name = _first_string(
         item.get("operatingSystem"),
@@ -60,6 +77,7 @@ def _normalize_client(item: dict[str, Any], server: str) -> dict[str, Any]:
 
     return {
         "server": server,
+        "source_networker": source_networker,
         "client_id": _string(item.get("clientId")) or _resource_id(item),
         "client_name": hostname,
         "client_os": os_name,
@@ -109,7 +127,7 @@ def _normalize_policies(payload: Any, server: str) -> tuple[list[dict[str, Any]]
     return policies, workflows
 
 
-def _normalize_backup(item: dict[str, Any], server: str) -> dict[str, Any]:
+def _normalize_backup(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:
     attributes = _attributes(item.get("attributes"))
     policy = _strip_policy_suffix(attributes.get("*policy name") or attributes.get("policy name") or "")
     workflow = _strip_policy_suffix(attributes.get("*policy workflow name") or attributes.get("policy workflow name") or "")
@@ -117,6 +135,7 @@ def _normalize_backup(item: dict[str, Any], server: str) -> dict[str, Any]:
 
     return {
         "server": server,
+        "source_networker": source_networker,
         "backup_id": _string(item.get("id")),
         "client_name": _string(item.get("clientHostname")),
         "client_id": _string(item.get("clientId")),
@@ -147,19 +166,44 @@ def _build_summary(
     failed = Counter(job["policy_name"] or "unknown" for job in jobs if job["status"] == "failed")
     running = Counter(job["policy_name"] or "unknown" for job in jobs if job["status"] == "running")
     workflow_count = Counter(workflow["policy_name"] or "unknown" for workflow in workflows)
+    success_by_domain = Counter(
+        (job["security_domain"], job["policy_name"] or "unknown")
+        for job in jobs
+        if job["status"] == "success"
+    )
+    failed_by_domain = Counter(
+        (job["security_domain"], job["policy_name"] or "unknown")
+        for job in jobs
+        if job["status"] == "failed"
+    )
+    running_by_domain = Counter(
+        (job["security_domain"], job["policy_name"] or "unknown")
+        for job in jobs
+        if job["status"] == "running"
+    )
+    workflows_by_domain = Counter(
+        (workflow["security_domain"], workflow["policy_name"] or "unknown")
+        for workflow in workflows
+    )
 
     return {
         "server": server,
         "job_count": len(jobs),
         "client_count": len({client["client_name"] for client in clients if client["client_name"]}),
-        "policy_count": len(policies),
-        "workflow_count": len(workflows),
+        "policy_count": len({policy["policy_name"] for policy in policies}),
+        "workflow_count": len(
+            {(workflow["policy_name"], workflow["workflow_name"]) for workflow in workflows}
+        ),
         "backup_count": len(backups),
         "total_backup_bytes": sum(item.get("size_bytes") or 0 for item in backups),
         "job_success_count_by_policy": dict(success),
         "job_failed_count_by_policy": dict(failed),
         "job_running_count_by_policy": dict(running),
         "workflow_count_by_policy": dict(workflow_count),
+        "job_success_count_by_domain_policy": _nested_counts(success_by_domain),
+        "job_failed_count_by_domain_policy": _nested_counts(failed_by_domain),
+        "job_running_count_by_domain_policy": _nested_counts(running_by_domain),
+        "workflow_count_by_domain_policy": _nested_counts(workflows_by_domain),
         "recent_failed_jobs": [job for job in jobs if job["status"] == "failed"][:20],
     }
 
@@ -171,10 +215,18 @@ def _build_monthly_report(
     workflows: list[dict[str, Any]],
     backups: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    rows: dict[tuple[str, str], dict[str, Any]] = defaultdict(
+    clients_by_domain: dict[str, set[str]] = defaultdict(set)
+    for client in clients:
+        if client["client_name"]:
+            clients_by_domain[client["security_domain"]].add(client["client_name"])
+
+    rows: dict[tuple[str, str, str], dict[str, Any]] = defaultdict(
         lambda: {
             "server": server,
             "month": datetime.now(timezone.utc).strftime("%Y-%m"),
+            "source_networker": "",
+            "security_domain": "unmapped",
+            "classification_status": "derived",
             "policy_name": "unknown",
             "workflow_name": "",
             "total_backup_bytes": 0,
@@ -183,26 +235,44 @@ def _build_monthly_report(
             "job_failed_count": 0,
             "job_running_count": 0,
             "workflow_count": 0,
-            "client_count": len({client["client_name"] for client in clients if client["client_name"]}),
+            "client_count": 0,
         }
     )
 
     for workflow in workflows:
-        key = (workflow["policy_name"] or "unknown", workflow["workflow_name"] or "")
-        rows[key]["policy_name"] = key[0]
-        rows[key]["workflow_name"] = key[1]
+        key = (
+            workflow["security_domain"],
+            workflow["policy_name"] or "unknown",
+            workflow["workflow_name"] or "",
+        )
+        rows[key]["security_domain"] = key[0]
+        rows[key]["policy_name"] = key[1]
+        rows[key]["workflow_name"] = key[2]
+        rows[key]["source_networker"] = workflow["source_networker"]
         rows[key]["workflow_count"] += 1
 
     for backup in backups:
-        key = (backup["policy_name"] or "unknown", backup["workflow_name"] or "")
-        rows[key]["policy_name"] = key[0]
-        rows[key]["workflow_name"] = key[1]
+        key = (
+            backup["security_domain"],
+            backup["policy_name"] or "unknown",
+            backup["workflow_name"] or "",
+        )
+        rows[key]["security_domain"] = key[0]
+        rows[key]["policy_name"] = key[1]
+        rows[key]["workflow_name"] = key[2]
+        rows[key]["source_networker"] = backup["source_networker"]
         rows[key]["total_backup_bytes"] += backup.get("size_bytes") or 0
 
     for job in jobs:
-        key = (job["policy_name"] or "unknown", job["workflow_name"] or "")
-        rows[key]["policy_name"] = key[0]
-        rows[key]["workflow_name"] = key[1]
+        key = (
+            job["security_domain"],
+            job["policy_name"] or "unknown",
+            job["workflow_name"] or "",
+        )
+        rows[key]["security_domain"] = key[0]
+        rows[key]["policy_name"] = key[1]
+        rows[key]["workflow_name"] = key[2]
+        rows[key]["source_networker"] = job["source_networker"]
         if job["status"] == "success":
             rows[key]["job_success_count"] += 1
         elif job["status"] == "failed":
@@ -212,8 +282,84 @@ def _build_monthly_report(
 
     for row in rows.values():
         row["total_backup_tb"] = round(row["total_backup_bytes"] / 1000**4, 3)
+        row["client_count"] = len(clients_by_domain[row["security_domain"]])
 
     return list(rows.values())
+
+
+def _classify_record(record: dict[str, Any], classifier: HostnameClassifier | None) -> dict[str, Any]:
+    hostname = record.get("client_name")
+    if classifier is None:
+        return record | {
+            "client_hostname": _string(hostname).lower().rstrip("."),
+            "security_domain": "unmapped",
+            "classification_status": "classifier_unavailable",
+            "classification_source": "hostname_csv",
+        }
+
+    classification = classifier.classify(hostname)
+    return record | {
+        "client_hostname": classification.hostname,
+        "security_domain": classification.security_domain,
+        "classification_status": classification.status,
+        "classification_source": "hostname_csv",
+    }
+
+
+def _classify_inventory(
+    policies: list[dict[str, Any]],
+    workflows: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    backups: list[dict[str, Any]],
+    source_networker: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    policy_domains: dict[str, set[str]] = defaultdict(set)
+    workflow_domains: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for record in jobs + backups:
+        domain = record["security_domain"]
+        policy = record.get("policy_name") or ""
+        workflow = record.get("workflow_name") or ""
+        if policy:
+            policy_domains[policy].add(domain)
+        if policy or workflow:
+            workflow_domains[(policy, workflow)].add(domain)
+
+    classified_policies = []
+    for policy in policies:
+        domains = policy_domains.get(policy["policy_name"]) or {"unmapped"}
+        for domain in sorted(domains):
+            classified_policies.append(
+                policy
+                | {
+                    "source_networker": source_networker,
+                    "security_domain": domain,
+                    "classification_status": "derived_from_workload",
+                    "classification_source": "hostname_csv",
+                }
+            )
+
+    classified_workflows = []
+    for workflow in workflows:
+        key = (workflow["policy_name"], workflow["workflow_name"])
+        domains = workflow_domains.get(key) or policy_domains.get(workflow["policy_name"]) or {"unmapped"}
+        for domain in sorted(domains):
+            classified_workflows.append(
+                workflow
+                | {
+                    "source_networker": source_networker,
+                    "security_domain": domain,
+                    "classification_status": "derived_from_workload",
+                    "classification_source": "hostname_csv",
+                }
+            )
+    return classified_policies, classified_workflows
+
+
+def _nested_counts(counts: Counter[tuple[str, str]]) -> dict[str, dict[str, int]]:
+    result: dict[str, dict[str, int]] = defaultdict(dict)
+    for (domain, policy), count in counts.items():
+        result[domain][policy] = count
+    return dict(result)
 
 
 def _items(payload: Any, key: str) -> list[dict[str, Any]]:
