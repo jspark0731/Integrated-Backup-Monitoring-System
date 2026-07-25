@@ -27,6 +27,11 @@ collectors:
     username: networker_core_username_TO_BE_FILLED
     password: networker_core_password_TO_BE_FILLED
     verify_tls: true
+    source_networker: core
+    classification:
+      hostname_csv_path: /app/config/hostname_domain.csv
+      allowed_domains: [core, chnl, info, ifrs]
+      unmapped_domain: unmapped
 
   - name: networker_chnl
     type: Networker
@@ -42,6 +47,11 @@ collectors:
     username: networker_chnl_username_TO_BE_FILLED
     password: networker_chnl_password_TO_BE_FILLED
     verify_tls: true
+    source_networker: chnl
+    classification:
+      hostname_csv_path: /app/config/hostname_domain.csv
+      allowed_domains: [core, chnl, info, ifrs]
+      unmapped_domain: unmapped
 
   - name: networker_info
     type: Networker
@@ -57,6 +67,11 @@ collectors:
     username: networker_info_username_TO_BE_FILLED
     password: networker_info_password_TO_BE_FILLED
     verify_tls: true
+    source_networker: info
+    classification:
+      hostname_csv_path: /app/config/hostname_domain.csv
+      allowed_domains: [core, chnl, info, ifrs]
+      unmapped_domain: unmapped
 
   - name: networker_ifrs
     type: Networker
@@ -72,3 +87,8 @@ collectors:
     username: networker_ifrs_username_TO_BE_FILLED
     password: networker_ifrs_password_TO_BE_FILLED
     verify_tls: true
+    source_networker: ifrs
+    classification:
+      hostname_csv_path: /app/config/hostname_domain.csv
+      allowed_domains: [core, chnl, info, ifrs]
+      unmapped_domain: unmapped
