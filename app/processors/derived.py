@@ -121,6 +121,8 @@ def _derived_document(
         "source_raw_id": raw_document.get("_id") or raw_document.get("raw_document_id"),
         "record_id": str(record_id or "unknown"),
         "derived_id": f"{collector}:{document_type}:{record_id or 'unknown'}:{month}",
+        "source_networker": record.get("source_networker"),
+        "security_domain": record.get("security_domain"),
         "payload": record,
     }
 

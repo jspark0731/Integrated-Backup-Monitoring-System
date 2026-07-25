@@ -6,6 +6,7 @@ from typing import Any
 from app.core.config import ElasticsearchConfig
 from app.core.metrics import ELASTICSEARCH_WRITE_TOTAL
 from app.models import CollectionResult
+from app.processors.derived import build_derived_documents
 
 LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ class ElasticsearchWriter:
             await self.client.close()
 
     def _actions_for_result(self, result: CollectionResult) -> list[dict]:
+        if result.target_type == "Networker":
+            return self._networker_actions(result)
         return [
             {
                 "_op_type": "index",
@@ -72,6 +75,39 @@ class ElasticsearchWriter:
                 "_source": self._current_document(result),
             },
         ]
+
+    def _networker_actions(self, result: CollectionResult) -> list[dict]:
+        raw_document = self._raw_document(result)
+        source = self._networker_source(result)
+        month = result.collected_at.strftime("%Y-%m")
+        raw_index = f"NW-OPS-RAW-{source.upper()}-{month}"
+        current_index = f"NW-OPS-CURRENT-{source.upper()}-{month}"
+        actions = [
+            {
+                "_op_type": "index",
+                "_index": raw_index,
+                "_id": self._raw_document_id(result),
+                "_source": raw_document,
+            },
+            {
+                "_op_type": "index",
+                "_index": current_index,
+                "_id": self._current_document_id(result),
+                "_source": self._current_document(result),
+            },
+        ]
+        for document in build_derived_documents(raw_document):
+            domain = self._security_domain(document)
+            document_type = self._networker_entity_segment(document)
+            actions.append(
+                {
+                    "_op_type": "index",
+                    "_index": f"NW-{domain.upper()}-{document_type}-{month}",
+                    "_id": document["derived_id"],
+                    "_source": document,
+                }
+            )
+        return actions
 
     def _index_name(self, result: CollectionResult | None = None, document_type: str | None = None) -> str:
         if result:
@@ -109,6 +145,28 @@ class ElasticsearchWriter:
             "processing_mode": "etl",
             "summary": summary,
         }
+
+    @staticmethod
+    def _networker_source(result: CollectionResult) -> str:
+        summary = result.payload.get("summary") if isinstance(result.payload, dict) else {}
+        if isinstance(summary, dict) and summary.get("source_networker"):
+            source = str(summary["source_networker"]).strip().lower()
+        else:
+            source = _site_segment(result.collector).lower()
+        return source if source in {"core", "chnl", "info", "ifrs"} else "unknown"
+
+    @staticmethod
+    def _security_domain(document: dict) -> str:
+        payload = document.get("payload")
+        domain = payload.get("security_domain") if isinstance(payload, dict) else None
+        normalized = str(domain or "unmapped").strip().lower()
+        return normalized if normalized in {"core", "chnl", "info", "ifrs"} else "unmapped"
+
+    @staticmethod
+    def _networker_entity_segment(document: dict) -> str:
+        document_type = str(document.get("document_type") or "unknown").strip().lower()
+        aliases = {"monthly-report": "MONTHLY"}
+        return aliases.get(document_type, document_type.upper())
 
     def _raw_document_id(self, result: CollectionResult) -> str:
         timestamp = result.collected_at.strftime("%Y%m%dT%H%M%S.%fZ")

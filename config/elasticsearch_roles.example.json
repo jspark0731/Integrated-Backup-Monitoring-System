@@ -1,0 +1,47 @@
+{
+  "grafana_networker_core": {
+    "cluster": [],
+    "indices": [
+      {
+        "names": ["NW-CORE-*"],
+        "privileges": ["read", "view_index_metadata"]
+      }
+    ]
+  },
+  "grafana_networker_chnl": {
+    "cluster": [],
+    "indices": [
+      {
+        "names": ["NW-CHNL-*"],
+        "privileges": ["read", "view_index_metadata"]
+      }
+    ]
+  },
+  "grafana_networker_info": {
+    "cluster": [],
+    "indices": [
+      {
+        "names": ["NW-INFO-*"],
+        "privileges": ["read", "view_index_metadata"]
+      }
+    ]
+  },
+  "grafana_networker_ifrs": {
+    "cluster": [],
+    "indices": [
+      {
+        "names": ["NW-IFRS-*"],
+        "privileges": ["read", "view_index_metadata"]
+      }
+    ]
+  },
+  "grafana_backup_operations": {
+    "cluster": [],
+    "indices": [
+      {
+        "names": ["NW-*", "VTL-*", "PTL-*", "ZFS-*"],
+        "privileges": ["read", "view_index_metadata"]
+      }
+    ]
+  }
+}
