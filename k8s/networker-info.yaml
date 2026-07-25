@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-dashboard-collector-networker-info-config
+data:
+  collector.yaml: |
+    app: {name: backup-dashboard-collector-networker-info, log_level: INFO}
+    elasticsearch:
+      enabled: false
+      hosts: [https://elasticsearch:9200]
+      username_file: /app/secrets/elasticsearch-username
+      password_file: /app/secrets/elasticsearch-password
+      verify_certs: true
+      ca_certs: /app/secrets/elasticsearch-ca.crt
+    collectors:
+      - name: networker_info
+        type: Networker
+        protocol: rest
+        enabled: true
+        schedule: {interval_minutes: 5, minute_offset: 3, second: 0}
+        base_url: networker_info_base_url_TO_BE_FILLED
+        token_file: /app/secrets/networker-token
+        username_file: /app/secrets/networker-username
+        password_file: /app/secrets/networker-password
+        verify_tls: true
+        source_networker: info
+        classification:
+          hostname_csv_path: /app/config/hostname_domain.csv
+          allowed_domains: [core, chnl, info, ifrs]
+          unmapped_domain: unmapped
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-dashboard-collector-networker-info
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: backup-dashboard-collector, collector: networker-info}
+  template:
+    metadata:
+      labels: {app: backup-dashboard-collector, collector: networker-info}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/path: /metrics, prometheus.io/port: "8080"}
+    spec:
+      containers:
+        - name: collector
+          image: backup-dashboard-collector-networker:latest
+          ports: [{name: http, containerPort: 8080}]
+          env: [{name: APP_CONFIG, value: /app/config/collector.yaml}]
+          volumeMounts:
+            - {name: collector-config, mountPath: /app/config/collector.yaml, subPath: collector.yaml}
+            - {name: hostname-classification, mountPath: /app/config/hostname_domain.csv, subPath: hostname_domain.csv, readOnly: true}
+            - {name: secrets, mountPath: /app/secrets, readOnly: true}
+          readinessProbe: {httpGet: {path: /readyz, port: http}, initialDelaySeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 10}
+      volumes:
+        - {name: collector-config, configMap: {name: backup-dashboard-collector-networker-info-config}}
+        - {name: hostname-classification, configMap: {name: backup-dashboard-networker-hostname-classification}}
+        - {name: secrets, secret: {secretName: backup-dashboard-collector-networker-info-secrets}}

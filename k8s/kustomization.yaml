@@ -5,4 +5,8 @@ resources:
   - dd.yaml
   - i6000.yaml
   - networker.yaml
+  - networker-core.yaml
+  - networker-chnl.yaml
+  - networker-info.yaml
+  - networker-ifrs.yaml
   - zfs.yaml
