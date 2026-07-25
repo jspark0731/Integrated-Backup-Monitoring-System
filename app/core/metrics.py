@@ -161,31 +161,31 @@ NETWORKER_API_UP = Gauge(
 NETWORKER_JOB_SUCCESS_COUNT = Gauge(
     "backup_networker_job_success_count",
     "NetWorker successful job count by policy",
-    ["server", "policy"],
+    ["server", "policy", "security_domain"],
 )
 
 NETWORKER_JOB_FAILED_COUNT = Gauge(
     "backup_networker_job_failed_count",
     "NetWorker failed job count by policy",
-    ["server", "policy"],
+    ["server", "policy", "security_domain"],
 )
 
 NETWORKER_JOB_RUNNING_COUNT = Gauge(
     "backup_networker_job_running_count",
     "NetWorker running job count by policy",
-    ["server", "policy"],
+    ["server", "policy", "security_domain"],
 )
 
 NETWORKER_WORKFLOW_COUNT = Gauge(
     "backup_networker_workflow_count",
     "NetWorker workflow count by policy",
-    ["server", "policy"],
+    ["server", "policy", "security_domain"],
 )
 
 NETWORKER_CLIENT_COUNT = Gauge(
     "backup_networker_client_count",
     "NetWorker unique client count",
-    ["server"],
+    ["server", "security_domain"],
 )
 
 ZFS_API_UP = Gauge(
