@@ -75,6 +75,9 @@ collectors:
     base_url: https://networker.example.com:9090
     username: admin
     password: secret
+    source_networker: core
+    classification:
+      hostname_csv_path: /app/config/hostname_domain.csv
 """,
         encoding="utf-8",
     )
@@ -84,6 +87,8 @@ collectors:
     assert config.collectors[0].schedule_second == 30
     assert config.collectors[0].effective_schedule.interval_minutes == 1
     assert config.collectors[0].effective_schedule.second == 30
+    assert config.collectors[0].source_networker == "core"
+    assert config.collectors[0].hostname_csv_path == "/app/config/hostname_domain.csv"
 
 
 def test_config_loads_secret_values_from_files(tmp_path: Path) -> None:

@@ -109,6 +109,44 @@ def test_networker_raw_document_can_be_transformed_to_derived_documents() -> Non
     assert documents[0]["derived_id"] == "networker_core:job:1:2026-06"
 
 
+def test_networker_actions_route_ops_and_domain_entity_indexes() -> None:
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+    result = CollectionResult(
+        collector="networker_chnl",
+        target_type="Networker",
+        protocol="rest",
+        collected_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        ok=True,
+        payload={
+            "summary": {"source_networker": "chnl"},
+            "jobs": [
+                {
+                    "job_id": "job-1",
+                    "client_name": "core-db01.example.com",
+                    "source_networker": "chnl",
+                    "security_domain": "core",
+                }
+            ],
+            "clients": [
+                {
+                    "client_name": "unknown-host",
+                    "source_networker": "chnl",
+                    "security_domain": "unmapped",
+                }
+            ],
+        },
+    )
+
+    actions = writer._actions_for_result(result)
+
+    assert [action["_index"] for action in actions] == [
+        "NW-OPS-RAW-CHNL-2026-07",
+        "NW-OPS-CURRENT-CHNL-2026-07",
+        "NW-CORE-JOB-2026-07",
+        "NW-UNMAPPED-CLIENT-2026-07",
+    ]
+
+
 def test_zfs_raw_document_can_be_transformed_to_derived_documents() -> None:
     raw_document = {
         "_id": "ZFS_1:raw:20260629T000000.000000Z",

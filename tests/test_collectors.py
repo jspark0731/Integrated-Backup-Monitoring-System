@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from app.collectors.factory import build_collector
@@ -190,7 +192,9 @@ def test_i6000_snmp_collector_is_rejected() -> None:
         )
 
 
-def test_networker_rest_collector_uses_default_endpoint_map() -> None:
+def test_networker_rest_collector_uses_default_endpoint_map(tmp_path: Path) -> None:
+    hostname_csv = tmp_path / "hostname_domain.csv"
+    hostname_csv.write_text("hostname,security_domain\nclient01,core\n", encoding="utf-8")
     collector = build_collector(
         CollectorConfig(
             name="networker_core",
@@ -201,6 +205,8 @@ def test_networker_rest_collector_uses_default_endpoint_map() -> None:
             base_url="https://networker.example.com:9090",
             username="administrator",
             password="secret",
+            source_networker="core",
+            hostname_csv_path=str(hostname_csv),
         )
     )
 
