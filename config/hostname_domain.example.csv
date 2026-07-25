@@ -1,0 +1,6 @@
+hostname,security_domain
+core-db01.example.com,core
+core-app01.example.com,core
+chnl-web01.example.com,chnl
+info-db01.example.com,info
+ifrs-app01.example.com,ifrs
