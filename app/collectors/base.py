@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import logging
 import time
 
-from app.core.config import CollectorConfig
+from app.core.config import CollectionClass, CollectorConfig
 from app.core.metrics import COLLECTION_DURATION, COLLECTION_TOTAL, COLLECTOR_LAST_SUCCESS_TIMESTAMP, COLLECTOR_SKIPPED
 from app.models import CollectionResult
 
@@ -28,17 +28,23 @@ class BaseCollector(ABC):
     def protocol(self) -> str:
         return self.config.protocol
 
-    async def collect(self) -> CollectionResult:
+    async def collect(self, collection_class: CollectionClass = "fast") -> CollectionResult:
         skip_reason = self.config.skip_reason
         if skip_reason:
             LOGGER.warning("Skipping collector %s: %s", self.name, skip_reason)
             COLLECTOR_SKIPPED.labels(self.name, self.target_type, skip_reason).set(1)
             COLLECTION_TOTAL.labels(self.name, self.target_type, self.protocol, "skipped").inc()
-            return CollectionResult.skipped_result(self.name, self.target_type, self.protocol, skip_reason)
+            return CollectionResult.skipped_result(
+                self.name,
+                self.target_type,
+                self.protocol,
+                skip_reason,
+                collection_class,
+            )
 
         started = time.monotonic()
         try:
-            payload = await self._collect_payload()
+            payload = await self._collect_payload_for_class(collection_class)
             result = CollectionResult(
                 collector=self.name,
                 target_type=self.target_type,
@@ -46,6 +52,7 @@ class BaseCollector(ABC):
                 collected_at=datetime.now(timezone.utc),
                 ok=True,
                 payload=payload,
+                collection_class=collection_class,
             )
             COLLECTION_TOTAL.labels(self.name, self.target_type, self.protocol, "success").inc()
             COLLECTOR_LAST_SUCCESS_TIMESTAMP.labels(self.name).set(result.collected_at.timestamp())
@@ -60,10 +67,15 @@ class BaseCollector(ABC):
                 collected_at=datetime.now(timezone.utc),
                 ok=False,
                 error=str(exc),
+                collection_class=collection_class,
             )
         finally:
             duration = time.monotonic() - started
             COLLECTION_DURATION.labels(self.name, self.target_type, self.protocol).observe(duration)
+
+    async def _collect_payload_for_class(self, collection_class: CollectionClass) -> dict:
+        """Compatibility hook until a collector provides class-specific collection."""
+        return await self._collect_payload()
 
     @abstractmethod
     async def _collect_payload(self) -> dict:

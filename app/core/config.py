@@ -12,6 +12,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 Protocol = Literal["snmp", "rest", "ssh", "cli", "cli_snmp"]
+CollectionClass = Literal["fast", "slow"]
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,18 @@ class ScheduleConfig:
         if self.second < 0 or self.second > 59:
             return f"invalid schedule.second: {self.second}"
         return None
+
+
+@dataclass(frozen=True)
+class CollectionSchedulesConfig:
+    fast: ScheduleConfig
+    slow: ScheduleConfig | None = None
+
+    def items(self) -> tuple[tuple[CollectionClass, ScheduleConfig], ...]:
+        schedules: list[tuple[CollectionClass, ScheduleConfig]] = [("fast", self.fast)]
+        if self.slow is not None:
+            schedules.append(("slow", self.slow))
+        return tuple(schedules)
 
 
 @dataclass(frozen=True)
@@ -53,7 +66,7 @@ class CollectorConfig:
     type: str
     protocol: Protocol
     enabled: bool
-    schedule: ScheduleConfig | None = None
+    schedule: ScheduleConfig | CollectionSchedulesConfig | None = None
     schedule_second: int | None = None
     host: str | None = None
     port: int = 161
@@ -83,6 +96,9 @@ class CollectorConfig:
 
     @property
     def effective_schedule(self) -> ScheduleConfig:
+        """Return the fast schedule for callers using the legacy single-schedule API."""
+        if isinstance(self.schedule, CollectionSchedulesConfig):
+            return self.schedule.fast
         if self.schedule is not None:
             return self.schedule
         if self.schedule_second is not None:
@@ -95,12 +111,19 @@ class CollectorConfig:
         return default_schedule(self.type)
 
     @property
+    def effective_schedules(self) -> tuple[tuple[CollectionClass, ScheduleConfig], ...]:
+        if isinstance(self.schedule, CollectionSchedulesConfig):
+            return self.schedule.items()
+        return (("fast", self.effective_schedule),)
+
+    @property
     def skip_reason(self) -> str | None:
         if not self.enabled:
             return "collector is disabled"
-        schedule_skip_reason = self.effective_schedule.skip_reason
-        if schedule_skip_reason:
-            return schedule_skip_reason
+        for collection_class, schedule in self.effective_schedules:
+            schedule_skip_reason = schedule.skip_reason
+            if schedule_skip_reason:
+                return f"{collection_class} {schedule_skip_reason}"
         if self.protocol == "snmp":
             return self._snmp_skip_reason()
         if self.protocol == "rest":
@@ -275,14 +298,40 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
     )
 
 
-def _parse_schedule(raw: dict[str, Any], target_type: str) -> tuple[ScheduleConfig, int | None]:
+def _parse_schedule(
+    raw: dict[str, Any],
+    target_type: str,
+) -> tuple[ScheduleConfig | CollectionSchedulesConfig, int | None]:
     if "schedule" in raw:
         schedule_raw = raw.get("schedule") or {}
+        if "fast" in schedule_raw or "slow" in schedule_raw:
+            fast_raw = schedule_raw.get("fast") or {}
+            slow_raw = schedule_raw.get("slow")
+            return (
+                CollectionSchedulesConfig(
+                    fast=_schedule_from_mapping(
+                        fast_raw,
+                        target_type=target_type,
+                        default_interval_minutes=5,
+                        default_second_value=0,
+                    ),
+                    slow=_schedule_from_mapping(
+                        slow_raw or {},
+                        target_type=target_type,
+                        default_interval_minutes=60,
+                        default_second_value=30,
+                    )
+                    if slow_raw is not None
+                    else None,
+                ),
+                None,
+            )
         return (
-            ScheduleConfig(
-                interval_minutes=int(schedule_raw.get("interval_minutes", 5)),
-                minute_offset=int(schedule_raw.get("minute_offset", default_minute_offset(target_type))),
-                second=int(schedule_raw.get("second", 0)),
+            _schedule_from_mapping(
+                schedule_raw,
+                target_type=target_type,
+                default_interval_minutes=5,
+                default_second_value=0,
             ),
             None,
         )
@@ -305,6 +354,24 @@ def _parse_schedule(raw: dict[str, Any], target_type: str) -> tuple[ScheduleConf
         )
 
     return default_schedule(target_type), None
+
+
+def _schedule_from_mapping(
+    raw: dict[str, Any],
+    *,
+    target_type: str,
+    default_interval_minutes: int,
+    default_second_value: int,
+) -> ScheduleConfig:
+    interval_minutes = int(raw.get("interval_minutes", default_interval_minutes))
+    default_offset = default_minute_offset(target_type)
+    if default_offset >= interval_minutes:
+        default_offset = 0
+    return ScheduleConfig(
+        interval_minutes=interval_minutes,
+        minute_offset=int(raw.get("minute_offset", default_offset)),
+        second=int(raw.get("second", default_second_value)),
+    )
 
 
 def default_schedule(target_type: str) -> ScheduleConfig:

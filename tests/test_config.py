@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from app.core.config import default_minute_offset, default_second, has_unfilled_values, load_config
+from app.core.config import (
+    CollectionSchedulesConfig,
+    default_minute_offset,
+    default_second,
+    has_unfilled_values,
+    load_config,
+)
 
 
 def test_default_schedule_offsets() -> None:
@@ -89,6 +95,97 @@ collectors:
     assert config.collectors[0].effective_schedule.second == 30
     assert config.collectors[0].source_networker == "core"
     assert config.collectors[0].hostname_csv_path == "/app/config/hostname_domain.csv"
+
+
+def test_fast_and_slow_schedules_load_with_defaults(tmp_path: Path) -> None:
+    config_path = tmp_path / "collector.yaml"
+    config_path.write_text(
+        """
+collectors:
+  - name: i6000_core_rest
+    type: i6000
+    protocol: rest
+    enabled: true
+    schedule:
+      fast:
+        interval_minutes: 5
+        minute_offset: 2
+      slow:
+        interval_minutes: 60
+        minute_offset: 2
+    base_url: https://i6000.example.com
+    username: admin
+    password: secret
+    endpoints:
+      status: aml/physicalLibrary/status
+""",
+        encoding="utf-8",
+    )
+
+    collector = load_config(config_path).collectors[0]
+
+    assert isinstance(collector.schedule, CollectionSchedulesConfig)
+    assert collector.effective_schedule == collector.schedule.fast
+    assert collector.effective_schedules == (
+        ("fast", collector.schedule.fast),
+        ("slow", collector.schedule.slow),
+    )
+    assert collector.schedule.fast.second == 0
+    assert collector.schedule.slow is not None
+    assert collector.schedule.slow.second == 30
+    assert collector.skip_reason is None
+
+
+def test_single_schedule_remains_a_fast_only_schedule(tmp_path: Path) -> None:
+    config_path = tmp_path / "collector.yaml"
+    config_path.write_text(
+        """
+collectors:
+  - name: DD4500
+    type: DD
+    protocol: snmp
+    enabled: true
+    schedule:
+      interval_minutes: 5
+      minute_offset: 1
+      second: 0
+    host: 192.0.2.10
+    community: public
+    oids:
+      state: 1.3.6.1.4.1.19746.1.1.1.0
+""",
+        encoding="utf-8",
+    )
+
+    collector = load_config(config_path).collectors[0]
+
+    assert collector.effective_schedules == (("fast", collector.effective_schedule),)
+
+
+def test_invalid_slow_schedule_marks_collector_skipped(tmp_path: Path) -> None:
+    config_path = tmp_path / "collector.yaml"
+    config_path.write_text(
+        """
+collectors:
+  - name: ZFS_1
+    type: ZFS
+    protocol: rest
+    enabled: true
+    schedule:
+      fast:
+        interval_minutes: 5
+      slow:
+        interval_minutes: 60
+        second: 60
+    base_url: https://zfs.example.com
+    token: secret
+""",
+        encoding="utf-8",
+    )
+
+    collector = load_config(config_path).collectors[0]
+
+    assert collector.skip_reason == "slow invalid schedule.second: 60"
 
 
 def test_config_loads_secret_values_from_files(tmp_path: Path) -> None:

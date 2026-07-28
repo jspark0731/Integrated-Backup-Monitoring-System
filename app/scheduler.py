@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 from app.collectors.base import BaseCollector
-from app.core.config import ScheduleConfig
+from app.core.config import CollectionClass, ScheduleConfig
 from app.models import CollectionResult
 from app.writers.elasticsearch import ElasticsearchWriter
 
@@ -18,23 +18,33 @@ class CollectorScheduler:
         self.writer = writer
         self._tasks: list[asyncio.Task] = []
         self._last_results: dict[str, CollectionResult] = {}
+        self._last_results_by_class: dict[str, dict[CollectionClass, CollectionResult]] = {}
 
     @property
     def last_results(self) -> dict[str, CollectionResult]:
         return self._last_results
 
+    @property
+    def last_results_by_class(self) -> dict[str, dict[CollectionClass, CollectionResult]]:
+        return self._last_results_by_class
+
     async def start(self) -> None:
         for collector in self.collectors:
-            task = asyncio.create_task(self._run_collector_forever(collector))
-            self._tasks.append(task)
-            LOGGER.info(
-                "Scheduled collector %s/%s every %d minutes at minute offset %d second %02d",
-                collector.target_type,
-                collector.name,
-                collector.config.effective_schedule.interval_minutes,
-                collector.config.effective_schedule.minute_offset,
-                collector.config.effective_schedule.second,
-            )
+            for collection_class, schedule in collector.config.effective_schedules:
+                task = asyncio.create_task(
+                    self._run_collector_forever(collector, collection_class, schedule)
+                )
+                self._tasks.append(task)
+                LOGGER.info(
+                    "Scheduled collector %s/%s class=%s every %d minutes "
+                    "at minute offset %d second %02d",
+                    collector.target_type,
+                    collector.name,
+                    collection_class,
+                    schedule.interval_minutes,
+                    schedule.minute_offset,
+                    schedule.second,
+                )
 
     async def stop(self) -> None:
         for task in self._tasks:
@@ -43,24 +53,41 @@ class CollectorScheduler:
         await self.writer.close()
 
     async def run_once(self) -> list[CollectionResult]:
-        results = await asyncio.gather(*(collector.collect() for collector in self.collectors))
+        jobs = (
+            collector.collect(collection_class)
+            for collector in self.collectors
+            for collection_class, _ in collector.config.effective_schedules
+        )
+        results = await asyncio.gather(*jobs)
         await self.writer.write_many(results)
-        self._last_results.update({result.collector: result for result in results})
+        for result in results:
+            self._record_result(result)
         return list(results)
 
-    async def _run_collector_forever(self, collector: BaseCollector) -> None:
+    async def _run_collector_forever(
+        self,
+        collector: BaseCollector,
+        collection_class: CollectionClass = "fast",
+        schedule: ScheduleConfig | None = None,
+    ) -> None:
         while True:
-            schedule = collector.config.effective_schedule
+            active_schedule = schedule or collector.config.effective_schedule
             await asyncio.sleep(
                 seconds_until_next_run(
-                    schedule.interval_minutes,
-                    schedule.minute_offset,
-                    schedule.second,
+                    active_schedule.interval_minutes,
+                    active_schedule.minute_offset,
+                    active_schedule.second,
                 )
             )
-            result = await collector.collect()
+            result = await collector.collect(collection_class)
             await self.writer.write_many([result])
-            self._last_results[result.collector] = result
+            self._record_result(result)
+
+    def _record_result(self, result: CollectionResult) -> None:
+        self._last_results[result.collector] = result
+        self._last_results_by_class.setdefault(result.collector, {})[
+            result.collection_class
+        ] = result
 
 
 def seconds_until_next_run(

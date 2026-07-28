@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from app.core.config import CollectionClass
+
 
 @dataclass(frozen=True)
 class CollectionResult:
@@ -16,9 +18,17 @@ class CollectionResult:
     error: str | None = None
     skipped: bool = False
     skip_reason: str | None = None
+    collection_class: CollectionClass = "fast"
 
     @classmethod
-    def skipped_result(cls, collector: str, target_type: str, protocol: str, reason: str) -> "CollectionResult":
+    def skipped_result(
+        cls,
+        collector: str,
+        target_type: str,
+        protocol: str,
+        reason: str,
+        collection_class: CollectionClass = "fast",
+    ) -> "CollectionResult":
         return cls(
             collector=collector,
             target_type=target_type,
@@ -27,6 +37,7 @@ class CollectionResult:
             ok=False,
             skipped=True,
             skip_reason=reason,
+            collection_class=collection_class,
         )
 
     def to_document(self) -> dict[str, Any]:
@@ -40,5 +51,5 @@ class CollectionResult:
             "error": self.error,
             "skipped": self.skipped,
             "skip_reason": self.skip_reason,
+            "collection_class": self.collection_class,
         }
-

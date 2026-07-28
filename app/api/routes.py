@@ -35,8 +35,22 @@ async def collectors(request: Request) -> list[dict]:
                 "minute_offset": collector.config.effective_schedule.minute_offset,
                 "second": collector.config.effective_schedule.second,
             },
+            "schedules": {
+                collection_class: {
+                    "interval_minutes": schedule.interval_minutes,
+                    "minute_offset": schedule.minute_offset,
+                    "second": schedule.second,
+                }
+                for collection_class, schedule in collector.config.effective_schedules
+            },
             "schedule_second": collector.config.schedule_second,
             "skip_reason": collector.config.skip_reason,
+            "last_results": {
+                collection_class: result.to_document()
+                for collection_class, result in scheduler.last_results_by_class.get(
+                    collector.name, {}
+                ).items()
+            },
             "last_result": scheduler.last_results.get(collector.name).to_document()
             if collector.name in scheduler.last_results
             else None,
