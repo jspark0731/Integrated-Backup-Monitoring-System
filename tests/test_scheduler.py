@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 import pytest
@@ -8,6 +9,7 @@ from app.core.config import (
     CollectorConfig,
     ScheduleConfig,
 )
+from app.models import CollectionResult
 from app.scheduler import CollectorScheduler, seconds_until_next_run
 
 
@@ -103,3 +105,112 @@ async def test_run_once_keeps_single_schedule_fast_only() -> None:
     results = await scheduler.run_once()
 
     assert [result.collection_class for result in results] == ["fast"]
+
+
+class UnexpectedlyFailingCollector(RecordingCollector):
+    def __init__(self, config: CollectorConfig, recovered: asyncio.Event) -> None:
+        super().__init__(config)
+        self.recovered = recovered
+
+    async def collect(self, collection_class="fast") -> CollectionResult:
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("unexpected collector failure")
+        self.recovered.set()
+        return CollectionResult(
+            collector=self.name,
+            target_type=self.target_type,
+            protocol=self.protocol,
+            collected_at=datetime.now(timezone.utc),
+            ok=True,
+            collection_class=collection_class,
+        )
+
+
+class FailingWriter(RecordingWriter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+        self.recovered = asyncio.Event()
+
+    async def write_many(self, results) -> None:
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("unexpected writer failure")
+        await super().write_many(results)
+        self.recovered.set()
+
+
+def scheduler_test_config(name: str = "DD4500") -> CollectorConfig:
+    return CollectorConfig(
+        name=name,
+        type="DD",
+        protocol="snmp",
+        enabled=True,
+        schedule=ScheduleConfig(5, 1, 0),
+        host="192.0.2.10",
+        community="public",
+        oids={"state": "1.3.6.1"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_collector_loop_runs_again_after_unexpected_exception(monkeypatch) -> None:
+    monkeypatch.setattr("app.scheduler.seconds_until_next_run", lambda *args: 0)
+    recovered = asyncio.Event()
+    collector = UnexpectedlyFailingCollector(scheduler_test_config(), recovered)
+    writer = RecordingWriter()
+    scheduler = CollectorScheduler([collector], writer)
+
+    task = asyncio.create_task(scheduler._run_collector_forever(collector))
+    await asyncio.wait_for(recovered.wait(), timeout=1)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+    assert collector.calls >= 2
+    assert len(writer.results) >= 1
+
+
+@pytest.mark.asyncio
+async def test_collector_loop_runs_again_after_writer_exception(monkeypatch) -> None:
+    monkeypatch.setattr("app.scheduler.seconds_until_next_run", lambda *args: 0)
+    collector = RecordingCollector(scheduler_test_config())
+    writer = FailingWriter()
+    scheduler = CollectorScheduler([collector], writer)
+
+    task = asyncio.create_task(scheduler._run_collector_forever(collector))
+    await asyncio.wait_for(writer.recovered.wait(), timeout=1)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+    assert writer.calls >= 2
+    assert collector.calls >= 2
+    assert scheduler.last_results[collector.name].ok
+
+
+@pytest.mark.asyncio
+async def test_one_collector_failure_does_not_stop_another(monkeypatch) -> None:
+    monkeypatch.setattr("app.scheduler.seconds_until_next_run", lambda *args: 0)
+    failing_recovered = asyncio.Event()
+    healthy_collected = asyncio.Event()
+    failing = UnexpectedlyFailingCollector(
+        scheduler_test_config("DD-failing"),
+        failing_recovered,
+    )
+
+    class HealthyCollector(RecordingCollector):
+        async def collect(self, collection_class="fast") -> CollectionResult:
+            result = await super().collect(collection_class)
+            healthy_collected.set()
+            return result
+
+    healthy = HealthyCollector(scheduler_test_config("DD-healthy"))
+    scheduler = CollectorScheduler([failing, healthy], RecordingWriter())
+
+    await scheduler.start()
+    await asyncio.wait_for(healthy_collected.wait(), timeout=1)
+    await asyncio.wait_for(failing_recovered.wait(), timeout=1)
+    await scheduler.stop()
+
+    assert healthy.calls >= 1
+    assert failing.calls >= 2

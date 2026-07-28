@@ -6,6 +6,7 @@ import logging
 
 from app.collectors.base import BaseCollector
 from app.core.config import CollectionClass, ScheduleConfig
+from app.core.metrics import SCHEDULER_LOOP_ERROR_TOTAL
 from app.models import CollectionResult
 from app.writers.elasticsearch import ElasticsearchWriter
 
@@ -32,7 +33,8 @@ class CollectorScheduler:
         for collector in self.collectors:
             for collection_class, schedule in collector.config.effective_schedules:
                 task = asyncio.create_task(
-                    self._run_collector_forever(collector, collection_class, schedule)
+                    self._run_collector_forever(collector, collection_class, schedule),
+                    name=f"collector:{collector.name}:{collection_class}",
                 )
                 self._tasks.append(task)
                 LOGGER.info(
@@ -50,6 +52,7 @@ class CollectorScheduler:
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks.clear()
         await self.writer.close()
 
     async def run_once(self) -> list[CollectionResult]:
@@ -71,17 +74,31 @@ class CollectorScheduler:
         schedule: ScheduleConfig | None = None,
     ) -> None:
         while True:
-            active_schedule = schedule or collector.config.effective_schedule
-            await asyncio.sleep(
-                seconds_until_next_run(
-                    active_schedule.interval_minutes,
-                    active_schedule.minute_offset,
-                    active_schedule.second,
+            try:
+                active_schedule = schedule or collector.config.effective_schedule
+                await asyncio.sleep(
+                    seconds_until_next_run(
+                        active_schedule.interval_minutes,
+                        active_schedule.minute_offset,
+                        active_schedule.second,
+                    )
                 )
-            )
-            result = await collector.collect(collection_class)
-            await self.writer.write_many([result])
-            self._record_result(result)
+                result = await collector.collect(collection_class)
+                self._record_result(result)
+                await self.writer.write_many([result])
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                SCHEDULER_LOOP_ERROR_TOTAL.labels(
+                    collector.name,
+                    collection_class,
+                ).inc()
+                LOGGER.exception(
+                    "Unexpected scheduler error for collector %s class=%s; "
+                    "continuing with the next schedule",
+                    collector.name,
+                    collection_class,
+                )
 
     def _record_result(self, result: CollectionResult) -> None:
         self._last_results[result.collector] = result

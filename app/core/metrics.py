@@ -32,6 +32,12 @@ COLLECTOR_LAST_SUCCESS_TIMESTAMP = Gauge(
     ["collector"],
 )
 
+SCHEDULER_LOOP_ERROR_TOTAL = Counter(
+    "backup_collector_scheduler_loop_error_total",
+    "Unexpected errors recovered by a collector scheduler loop",
+    ["collector", "collection_class"],
+)
+
 DEVICE_UP = Gauge(
     "backup_device_up",
     "Device reachability, 1 means reachable",
