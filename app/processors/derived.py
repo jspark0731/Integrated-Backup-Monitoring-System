@@ -113,6 +113,7 @@ def _derived_document(
     return {
         "@timestamp": raw_document.get("@timestamp"),
         "collector": collector,
+        "device_name": raw_document.get("device_name") or collector,
         "target_type": raw_document.get("target_type"),
         "solution": solution,
         "document_family": "derived",
@@ -147,7 +148,13 @@ def _solution(raw_document: dict[str, Any]) -> str:
     value = raw_document.get("solution")
     if value:
         return str(value)
-    aliases = {"DD": "dd", "DXi": "dxi", "Networker": "networker", "ZFS": "zfs", "i6000": "i6000"}
+    aliases = {
+        "DD": "vtl",
+        "DXi": "vtl",
+        "Networker": "networker",
+        "ZFS": "zfs",
+        "i6000": "ptl",
+    }
     return aliases.get(str(raw_document.get("target_type")), str(raw_document.get("target_type", "")).lower())
 
 

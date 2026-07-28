@@ -10,7 +10,6 @@ from app.processors.derived import build_derived_documents
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_INDEX_SEQUENCE = "1"
 SITE_ALIASES = {
     "core": "CORE",
     "chnl": "CHNL",
@@ -61,41 +60,47 @@ class ElasticsearchWriter:
     def _actions_for_result(self, result: CollectionResult) -> list[dict]:
         if result.target_type == "Networker":
             return self._networker_actions(result)
-        return [
+        actions = [
             {
                 "_op_type": "index",
                 "_index": self._index_name(result, "raw"),
                 "_id": self._raw_document_id(result),
                 "_source": self._raw_document(result),
-            },
-            {
-                "_op_type": "index",
-                "_index": self._index_name(result, "current"),
-                "_id": self._current_document_id(result),
-                "_source": self._current_document(result),
-            },
+            }
         ]
+        if result.collection_class == "fast":
+            actions.append(
+                {
+                    "_op_type": "index",
+                    "_index": self._index_name(result, "current"),
+                    "_id": self._current_document_id(result),
+                    "_source": self._current_document(result),
+                }
+            )
+        return actions
 
     def _networker_actions(self, result: CollectionResult) -> list[dict]:
         raw_document = self._raw_document(result)
         source = self._networker_source(result)
         month = result.collected_at.strftime("%Y-%m")
         raw_index = f"NW-OPS-RAW-{source.upper()}-{month}"
-        current_index = f"NW-OPS-CURRENT-{source.upper()}-{month}"
         actions = [
             {
                 "_op_type": "index",
                 "_index": raw_index,
                 "_id": self._raw_document_id(result),
                 "_source": raw_document,
-            },
-            {
-                "_op_type": "index",
-                "_index": current_index,
-                "_id": self._current_document_id(result),
-                "_source": self._current_document(result),
-            },
+            }
         ]
+        if result.collection_class == "fast":
+            actions.append(
+                {
+                    "_op_type": "index",
+                    "_index": f"NW-OPS-CURRENT-{source.upper()}",
+                    "_id": self._current_document_id(result),
+                    "_source": self._current_document(result),
+                }
+            )
         for document in build_derived_documents(raw_document):
             domain = self._security_domain(document)
             document_type = self._networker_entity_segment(document)
@@ -109,10 +114,17 @@ class ElasticsearchWriter:
             )
         return actions
 
-    def _index_name(self, result: CollectionResult | None = None, document_type: str | None = None) -> str:
+    def _index_name(
+        self,
+        result: CollectionResult | None = None,
+        document_type: str | None = None,
+    ) -> str:
         if result:
-            date_suffix = result.collected_at.strftime("%Y-%m-%d")
-            return f"{self._index_family(result)}-{self._index_segment(result)}-{date_suffix}-{DEFAULT_INDEX_SEQUENCE}"
+            family = self._index_family(result)
+            if document_type == "current":
+                return f"{family}-CURRENT"
+            month = result.collected_at.strftime("%Y-%m")
+            return f"{family}-RAW-{month}"
 
         return self.config.index_prefix
 
@@ -120,6 +132,7 @@ class ElasticsearchWriter:
         document = result.to_document()
         return document | {
             "raw_document_id": self._raw_document_id(result),
+            "device_name": self._device_name(result),
             "solution": self._solution(result),
             "document_family": "raw",
             "document_type": "collection",
@@ -133,6 +146,7 @@ class ElasticsearchWriter:
             "@timestamp": result.to_document()["@timestamp"],
             "current_document_id": self._current_document_id(result),
             "collector": result.collector,
+            "device_name": self._device_name(result),
             "target_type": result.target_type,
             "solution": self._solution(result),
             "protocol": result.protocol,
@@ -140,6 +154,12 @@ class ElasticsearchWriter:
             "error": result.error,
             "skipped": result.skipped,
             "skip_reason": result.skip_reason,
+            "collection_class": result.collection_class,
+            "collection_status": payload.get(
+                "collection_status",
+                "success" if result.ok else "error",
+            ),
+            "endpoint_errors": payload.get("endpoint_errors", {}),
             "document_family": "current",
             "document_type": "status",
             "processing_mode": "etl",
@@ -178,9 +198,9 @@ class ElasticsearchWriter:
     @staticmethod
     def _solution(result: CollectionResult) -> str:
         aliases = {
-            "DD": "dd",
-            "DXi": "dxi",
-            "i6000": "i6000",
+            "DD": "vtl",
+            "DXi": "vtl",
+            "i6000": "ptl",
             "Networker": "networker",
             "ZFS": "zfs",
         }
@@ -198,19 +218,14 @@ class ElasticsearchWriter:
         return aliases.get(result.target_type, result.target_type.upper())
 
     @staticmethod
-    def _index_segment(result: CollectionResult) -> str:
-        collector = result.collector.strip()
-        target_type = result.target_type
-
-        if target_type in {"DD", "DXi"}:
-            return collector.upper()
-        if target_type == "ZFS":
-            return collector.upper().removeprefix("ZFS_")
-        if target_type in {"i6000", "Networker"}:
-            return _site_segment(collector)
-
-        return collector.upper()
-
+    def _device_name(result: CollectionResult) -> str:
+        payload = result.payload if isinstance(result.payload, dict) else {}
+        summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+        for key in ("device_name", "server", "name"):
+            value = summary.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        return result.collector
 
 def _site_segment(collector: str) -> str:
     normalized = collector.lower().replace("-", "_")

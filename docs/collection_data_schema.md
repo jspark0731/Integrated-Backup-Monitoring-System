@@ -2,7 +2,7 @@
 
 > 기준 코드: `app/models.py`, `app/writers/elasticsearch.py`, `app/processors/derived.py`,
 > `app/parsers/*`, `app/collectors/*`, `app/core/metrics.py`  
-> 작성 기준일: 2026-07-25
+> 작성 기준일: 2026-07-28
 
 ## 1. 데이터 흐름
 
@@ -20,8 +20,9 @@ DD / DXi / i6000 / NetWorker / ZFS
 
 - **Grafana는 Elasticsearch와 Prometheus를 모두 datasource로 사용한다.**
 - **Elasticsearch**는 목록, 이력, 원본, 스냅샷, 집계 및 보고서성 데이터를
-  제공한다. 수집 1회마다 이력 보존용 `raw` 문서와 최신 상태용 `current`
-  문서가 같은 일자별 인덱스에 저장된다.
+  제공한다. 이력 보존용 `raw` 문서는 solution별 월간 인덱스에 저장되고,
+  fast 수집의 최신 상태인 `current` 문서는 solution별 고정 인덱스에서
+  collector ID로 덮어쓴다.
 - **Prometheus**는 장비 상태, 용량 사용률, 성공/실패 건수처럼 즉시 갱신되는
   숫자형 시계열을 제공한다. 수집기가 `/metrics`에 노출한 값을 Prometheus가
   scrape한다.
@@ -62,22 +63,22 @@ DD / DXi / i6000 / NetWorker / ZFS
 
 ### 2.1 이름 규칙
 
-장비 데이터는 `{FAMILY}-{SEGMENT}-{YYYY-MM-DD}-1`, NetWorker 분류 데이터는
-별도의 월별 규칙을 사용한다.
+일반 장비의 raw 데이터는 `{FAMILY}-RAW-{YYYY-MM}`, current 데이터는
+`{FAMILY}-CURRENT`를 사용한다. 장비는 인덱스가 아니라 `collector`와
+`device_name` 필드로 구분한다.
 
-| 대상 | FAMILY | SEGMENT 규칙 | 예시 |
+| 대상 | FAMILY | Raw 예시 | Current |
 |---|---|---|---|
-| DD | `VTL` | collector 이름 대문자 | `VTL-DD6900_1-2026-07-25-1` |
-| DXi | `VTL` | collector 이름 대문자 | `VTL-DXI_1-2026-07-25-1` |
-| i6000 | `PTL` | collector 이름의 사이트 토큰 | `PTL-CORE-2026-07-25-1` |
-| ZFS | `ZFS` | 대문자화 후 `ZFS_` 제거 | `ZFS-1-2026-07-25-1` |
+| DD / DXi | `VTL` | `VTL-RAW-2026-07` | `VTL-CURRENT` |
+| i6000 | `PTL` | `PTL-RAW-2026-07` | `PTL-CURRENT` |
+| ZFS | `ZFS` | `ZFS-RAW-2026-07` | `ZFS-CURRENT` |
 
 **NetWorker 인덱스**
 
 | 데이터 | 이름 규칙 | 예시 | 접근 대상 |
 |---|---|---|---|
 | Raw | `NW-OPS-RAW-{SOURCE}-{YYYY-MM}` | `NW-OPS-RAW-CHNL-2026-07` | 백업 운영자 |
-| Current | `NW-OPS-CURRENT-{SOURCE}-{YYYY-MM}` | `NW-OPS-CURRENT-CHNL-2026-07` | 백업 운영자 |
+| Current | `NW-OPS-CURRENT-{SOURCE}` | `NW-OPS-CURRENT-CHNL` | 백업 운영자 |
 | Derived | `NW-{DOMAIN}-{ENTITY}-{YYYY-MM}` | `NW-CORE-JOB-2026-07` | 해당 업무영역 운영자 |
 
 `SOURCE`는 호출한 NetWorker 서버의 `core/chnl/info/ifrs`이고, `DOMAIN`은
@@ -85,6 +86,9 @@ hostname CSV로 판정한 백업 대상 서버의 업무영역이다. 예를 들
 NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 문서의
 `source_networker`는 `chnl`이다. 미분류 문서는 `NW-UNMAPPED-{ENTITY}-*`에
 격리한다.
+
+이 변경은 새 수집 문서의 write 경로에 적용된다. 기존 일자별 인덱스의
+데이터를 새 월간 인덱스로 자동 reindex하거나 삭제하지 않는다.
 
 ### 2.2 공통 타입 표기
 
@@ -112,7 +116,9 @@ NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 
 | `raw_document_id` | `string` | `{collector}:raw:{YYYYMMDDTHHMMSS.ffffffZ}` |
 | `collector` | `string` | 설정된 수집기 이름 |
 | `target_type` | `string` | `DD`, `DXi`, `i6000`, `Networker`, `ZFS` |
-| `solution` | `string` | `dd`, `dxi`, `i6000`, `networker`, `zfs` |
+| `device_name` | `string` | payload summary의 장비명, 없으면 collector 이름 |
+| `solution` | `string` | `vtl`, `ptl`, `networker`, `zfs` |
+| `collection_class` | `string` | `fast` 또는 `slow` |
 | `protocol` | `string` | `snmp`, `cli_snmp`, `rest` 등 |
 | `ok` | `boolean` | 수집 성공 여부 |
 | `payload` | `object` | 대상별 정규화 데이터와 원본 데이터 |
@@ -128,8 +134,10 @@ NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 
   "@timestamp": "2026-07-25T01:23:45.123456+00:00",
   "raw_document_id": "DXi_1:raw:20260725T012345.123456Z",
   "collector": "DXi_1",
+  "device_name": "DXi_1",
   "target_type": "DXi",
-  "solution": "dxi",
+  "solution": "vtl",
+  "collection_class": "fast",
   "protocol": "cli_snmp",
   "ok": true,
   "payload": {
@@ -147,14 +155,15 @@ NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 
 
 ### 3.2 Current 문서 — 실제 저장
 
-collector별 최신 요약 상태를 제공한다. 문서 ID가 고정되어 같은 일자 인덱스
-안에서는 새 수집 결과가 이전 값을 덮어쓴다.
+collector별 최신 운영 상태를 제공한다. fast 수집만 current를 갱신하며,
+고정 인덱스에서 `{collector}:current` 문서 ID로 이전 값을 덮어쓴다.
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `@timestamp` | `datetime` | 최신 수집 완료 시각 |
 | `current_document_id` | `string` | `{collector}:current` |
 | `collector` | `string` | 수집기 이름 |
+| `device_name` | `string` | 장비명, 없으면 collector 이름 |
 | `target_type` | `string` | 대상 제품군 |
 | `solution` | `string` | 정규화된 솔루션명 |
 | `protocol` | `string` | 수집 프로토콜 |
@@ -162,6 +171,9 @@ collector별 최신 요약 상태를 제공한다. 문서 ID가 고정되어 같
 | `error` | `string nullable` | 실패 메시지 |
 | `skipped` | `boolean` | 수집 생략 여부 |
 | `skip_reason` | `string nullable` | 생략 사유 |
+| `collection_class` | `string` | current는 `fast` |
+| `collection_status` | `string` | `success`, `partial`, `error` |
+| `endpoint_errors` | `object` | REST endpoint별 부분 실패 정보 |
 | `document_family` | `string` | 고정값 `current` |
 | `document_type` | `string` | 고정값 `status` |
 | `processing_mode` | `string` | 고정값 `etl` |
@@ -175,6 +187,7 @@ collector별 최신 요약 상태를 제공한다. 문서 ID가 고정되어 같
 |---|---|---|
 | `@timestamp` | `datetime` | 원본 수집 시각 |
 | `collector` | `string` | 원본 collector |
+| `device_name` | `string` | 원본 장비명 |
 | `target_type` | `string` | 원본 대상 제품군 |
 | `solution` | `string` | 정규화된 솔루션명 |
 | `document_family` | `string` | 고정값 `derived` |
