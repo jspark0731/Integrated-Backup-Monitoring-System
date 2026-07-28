@@ -612,12 +612,11 @@ backup_networker_job_failed_count
 ## 7. 모델링 시 주의사항
 
 1. 원천 `raw` 객체는 장비 펌웨어/API 응답에 따라 필드와 타입이 달라질 수 있다.
-2. NetWorker 이외 제품은 Elasticsearch에서 `raw`와 `current`가 같은
-   인덱스를 사용하므로
-   Grafana Elasticsearch 쿼리에 `document_family` 필터를 항상 명시하는 것이
-   안전하다.
-3. 일자가 바뀌면 새 인덱스에 새 `current` 문서가 생기므로 전체 기간 검색에서
-   진짜 최신 상태를 얻으려면 collector별 `@timestamp` 최댓값을 선택해야 한다.
+2. 일반 장비의 `raw`와 `current`는 각각 월간 RAW 인덱스와 고정 CURRENT
+   인덱스를 사용한다. 쿼리 의도를 명확히 하려면 `document_family` 필터를
+   함께 사용하는 것이 안전하다.
+3. CURRENT 인덱스의 문서는 `{collector}:current` ID로 overwrite되므로
+   collector별 최신 상태를 추가 집계 없이 조회할 수 있다.
 4. `alert_counts`, 정책별 count 객체처럼 key가 동적으로 늘어나는 필드는
    Elasticsearch mapping explosion을 피하려면 `flattened` 타입이 적합하다.
 5. `payload.raw`처럼 구조가 불안정한 원천 데이터는 검색이 필요 없다면

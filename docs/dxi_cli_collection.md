@@ -64,11 +64,9 @@ right can be adjusted to match the actual DXi CLI.
 
 ## Parsed Payload
 
-The collector stores both normalized and raw output in
-`backup-dxi-summary-YYYY.MM`.
-
-DXi SNMP identity/state results are stored separately in
-`backup-dxi-status-YYYY.MM`.
+The collector stores normalized and raw CLI/SNMP output together in
+`VTL-RAW-YYYY-MM`. The latest summary overwrites `{collector}:current` in
+`VTL-CURRENT`.
 
 ```json
 {

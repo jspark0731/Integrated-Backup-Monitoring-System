@@ -8,25 +8,16 @@ i6000 devices.
 ## Flow
 
 ```text
-POST aml/users/login
-  -> receive session cookie
-GET aml/
-GET aml/physicalLibrary
-GET aml/physicalLibrary/status
-GET aml/drives
-GET aml/media?start=0&length=-1
-GET aml/physicalLibrary/segments?type=storage&status=used&start=0&length=-1
-GET aml/physicalLibrary/segments?type=storage&status=available&start=0&length=-1
-GET aml/devices/towers
-GET aml/devices/ieStations
-GET aml/system/ras
-GET aml/system/ras/tickets
-DELETE aml/users/login
+reused HTTP connection pool
+  -> POST aml/users/login
+  -> fast or slow endpoints in parallel, max_concurrency=4
+  -> keep successful payloads when one endpoint fails
+  -> DELETE aml/users/login
 ```
 
 The collector requests JSON with `Accept: application/json`, but it can also
-parse XML responses. The raw endpoint payloads and the normalized `summary`
-are both stored in Elasticsearch.
+parse XML responses. Login/logout occurs for every collection cycle while the
+HTTP client and TCP/TLS connections are reused for the application lifespan.
 
 ## Configuration
 
@@ -39,13 +30,20 @@ Services root host; endpoints are relative paths under that host.
   protocol: rest
   enabled: true
   schedule:
-    interval_minutes: 5
-    minute_offset: 2
-    second: 0
+    fast:
+      interval_minutes: 5
+      minute_offset: 2
+      second: 0
+    slow:
+      interval_minutes: 60
+      minute_offset: 2
+      second: 30
   base_url: https://i6000_core.example.com
   username: admin
   password: secret
   verify_tls: true
+  rest:
+    max_concurrency: 4
   endpoints:
     ping: aml/
     physical_library: aml/physicalLibrary
@@ -62,6 +60,11 @@ Services root host; endpoints are relative paths under that host.
 
 Set `verify_tls: false` only when the library uses a certificate that the
 collector trust store cannot validate.
+
+Fast collection includes reachability, library/drive/RAS status, RAS tickets,
+and storage slot counts. Slow collection includes physical library, media,
+tower, and I/E station inventory. Partial endpoint failures are recorded in
+`payload.endpoint_errors`.
 
 ## Prometheus
 
@@ -80,14 +83,7 @@ backup_tape_media_count{device_name="..."} 150
 
 ## Elasticsearch
 
-i6000 REST results are expanded into three documents so dashboards can query by
-purpose:
-
-```text
-backup-i6000-status-YYYY.MM
-backup-i6000-drive-YYYY.MM
-backup-i6000-media-YYYY.MM
-```
-
-Each REST document contains the same collector document plus
-`document_type: status`, `document_type: drive`, or `document_type: media`.
+Fast and slow raw results are stored in `PTL-RAW-YYYY-MM` with
+`collection_class`. Fast results also overwrite `{collector}:current` in
+`PTL-CURRENT`. Slow inventory does not overwrite the current operational
+status.
