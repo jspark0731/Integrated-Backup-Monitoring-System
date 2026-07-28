@@ -37,3 +37,6 @@ secrets/
 
 # tools
 tools/
+
+# etc
+.csv
