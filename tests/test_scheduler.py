@@ -235,3 +235,46 @@ async def test_stop_closes_collector_resources_and_writer() -> None:
 
     assert collector.closed
     assert writer.closed
+
+
+@pytest.mark.asyncio
+async def test_four_networker_collectors_run_independently_in_one_scheduler(
+    tmp_path,
+) -> None:
+    classification = tmp_path / "hostname_domain.csv"
+    classification.write_text(
+        "hostname,security_domain\n",
+        encoding="utf-8",
+    )
+
+    class FailingPayloadCollector(RecordingCollector):
+        async def _collect_payload(self) -> dict:
+            self.calls += 1
+            raise RuntimeError("CORE collection failed")
+
+    collectors = []
+    for source in ("core", "chnl", "info", "ifrs"):
+        config = CollectorConfig(
+            name=f"networker_{source}",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            schedule=ScheduleConfig(5, 3, 0),
+            base_url=f"https://networker-{source}.example.com",
+            token="secret",
+            source_networker=source,
+            hostname_csv_path=str(classification),
+        )
+        collector_type = FailingPayloadCollector if source == "core" else RecordingCollector
+        collectors.append(collector_type(config))
+
+    scheduler = CollectorScheduler(collectors, RecordingWriter())
+
+    results = await scheduler.run_once()
+
+    assert len(results) == 4
+    assert not scheduler.last_results["networker_core"].ok
+    assert all(
+        scheduler.last_results[f"networker_{source}"].ok
+        for source in ("chnl", "info", "ifrs")
+    )

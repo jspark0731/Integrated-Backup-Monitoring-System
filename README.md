@@ -102,6 +102,12 @@ then writes normalized job/client/policy/workflow/monthly report documents.
 Configure `base_url` as the NetWorker server root, for example
 `https://networker.example.com:9090`.
 
+CORE, CHNL, INFO, and IFRS run as four independent scheduler tasks inside the
+single `backup-dashboard-collector-networker` Deployment. Create the
+`backup-dashboard-collector-networker-secrets` Secret with the Elasticsearch
+keys and source-specific `networker-{source}-{token,username,password}` keys
+listed in `k8s/networker.yaml` before deployment.
+
 ## ZFS REST Collection
 
 ZFS collection uses the Oracle ZFS Storage Appliance REST API under `/api` by
