@@ -25,57 +25,85 @@ data:
         protocol: rest
         enabled: true
         schedule:
-          interval_minutes: 5
-          minute_offset: 4
-          second: 0
+          fast:
+            interval_minutes: 5
+            minute_offset: 4
+            second: 0
+          slow:
+            interval_minutes: 60
+            minute_offset: 4
+            second: 30
         base_url: ZFS_1_base_url_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/zfs/zfs-1-token
         username_file: /app/secrets/zfs/zfs-1-username
         password_file: /app/secrets/zfs/zfs-1-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
       - name: ZFS_2
         type: ZFS
         protocol: rest
         enabled: true
         schedule:
-          interval_minutes: 5
-          minute_offset: 4
-          second: 0
+          fast:
+            interval_minutes: 5
+            minute_offset: 4
+            second: 0
+          slow:
+            interval_minutes: 60
+            minute_offset: 4
+            second: 30
         base_url: ZFS_2_base_url_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/zfs/zfs-2-token
         username_file: /app/secrets/zfs/zfs-2-username
         password_file: /app/secrets/zfs/zfs-2-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
       - name: ZFS_3
         type: ZFS
         protocol: rest
         enabled: true
         schedule:
-          interval_minutes: 5
-          minute_offset: 4
-          second: 0
+          fast:
+            interval_minutes: 5
+            minute_offset: 4
+            second: 0
+          slow:
+            interval_minutes: 60
+            minute_offset: 4
+            second: 30
         base_url: ZFS_3_base_url_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/zfs/zfs-3-token
         username_file: /app/secrets/zfs/zfs-3-username
         password_file: /app/secrets/zfs/zfs-3-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
       - name: ZFS_4
         type: ZFS
         protocol: rest
         enabled: true
         schedule:
-          interval_minutes: 5
-          minute_offset: 4
-          second: 0
+          fast:
+            interval_minutes: 5
+            minute_offset: 4
+            second: 0
+          slow:
+            interval_minutes: 60
+            minute_offset: 4
+            second: 30
         base_url: ZFS_4_base_url_TO_BE_FILLED
         method: GET
         token_file: /app/secrets/zfs/zfs-4-token
         username_file: /app/secrets/zfs/zfs-4-username
         password_file: /app/secrets/zfs/zfs-4-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
 ---
 apiVersion: apps/v1
 kind: Deployment

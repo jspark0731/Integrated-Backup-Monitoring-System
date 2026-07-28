@@ -86,6 +86,7 @@ class CollectorConfig:
     username: str | None = None
     password: str | None = None
     verify_tls: bool = True
+    rest_max_concurrency: int = 4
     commands: dict[str, str] = field(default_factory=dict)
     ssh_key_path: str | None = None
     command_timeout: int = 30
@@ -148,6 +149,8 @@ class CollectorConfig:
         return None
 
     def _rest_skip_reason(self) -> str | None:
+        if self.rest_max_concurrency <= 0:
+            return f"invalid rest.max_concurrency: {self.rest_max_concurrency}"
         required = {"base_url": self.base_url}
         if self.type == "i6000":
             required.update(
@@ -280,6 +283,7 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         username=_optional_secret(raw, "username"),
         password=_optional_secret(raw, "password"),
         verify_tls=bool(raw.get("verify_tls", True)),
+        rest_max_concurrency=int((raw.get("rest") or {}).get("max_concurrency", 4)),
         commands=dict(raw.get("commands", {})),
         ssh_key_path=_optional(raw.get("ssh_key_path")),
         command_timeout=int(raw.get("command_timeout", 30)),

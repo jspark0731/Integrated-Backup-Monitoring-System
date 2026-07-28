@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
@@ -7,6 +8,8 @@ import xml.etree.ElementTree as ET
 import httpx
 
 from app.core.config import CollectorConfig
+from app.core.config import CollectionClass
+from app.clients.rest_client import ReusableRestClient
 
 
 DEFAULT_ENDPOINTS = {
@@ -22,27 +25,58 @@ DEFAULT_ENDPOINTS = {
     "ras_status": "aml/system/ras",
     "ras_tickets": "aml/system/ras/tickets",
 }
+FAST_ENDPOINTS = {
+    "ping",
+    "status",
+    "drives",
+    "segments_storage_used",
+    "segments_storage_available",
+    "ras_status",
+    "ras_tickets",
+}
+SLOW_ENDPOINTS = {
+    "physical_library",
+    "media",
+    "towers",
+    "ie_stations",
+}
 
 
 class I6000RestClient:
     def __init__(self, config: CollectorConfig) -> None:
         self.config = config
+        self._rest = ReusableRestClient(
+            verify_tls=config.verify_tls,
+            timeout_seconds=20,
+            max_concurrency=config.rest_max_concurrency,
+        )
+        self._session_lock = asyncio.Lock()
 
-    async def fetch_payloads(self) -> dict[str, Any]:
+    async def fetch_payloads(
+        self,
+        collection_class: CollectionClass | None = None,
+    ) -> dict[str, Any]:
         headers = {"Accept": "application/json"}
+        endpoints = _endpoints_for_class(
+            self.config.endpoints or DEFAULT_ENDPOINTS,
+            collection_class,
+        )
 
-        async with httpx.AsyncClient(verify=self.config.verify_tls, timeout=20) as client:
+        async with self._session_lock:
             if self.config.username and self.config.password:
-                await self._login(client, headers)
+                await self._login(self._rest.client, headers)
 
             try:
-                return {
-                    name: await self._get(client, endpoint, headers)
-                    for name, endpoint in (self.config.endpoints or DEFAULT_ENDPOINTS).items()
-                }
+                return await self._rest.fetch_named(
+                    endpoints,
+                    lambda client, endpoint: self._get(client, endpoint, headers),
+                )
             finally:
                 if self.config.username and self.config.password:
-                    await self._logout(client, headers)
+                    await self._logout(self._rest.client, headers)
+
+    async def close(self) -> None:
+        await self._rest.close()
 
     async def _login(self, client: httpx.AsyncClient, headers: dict[str, str]) -> None:
         response = await client.post(
@@ -83,6 +117,16 @@ def _decode_response(response: httpx.Response) -> Any:
     if text.startswith("<"):
         return _xml_to_obj(ET.fromstring(text))
     return {"body": text}
+
+
+def _endpoints_for_class(
+    endpoints: dict[str, str],
+    collection_class: CollectionClass | None,
+) -> dict[str, str]:
+    if collection_class is None:
+        return dict(endpoints)
+    selected = FAST_ENDPOINTS if collection_class == "fast" else SLOW_ENDPOINTS
+    return {name: endpoint for name, endpoint in endpoints.items() if name in selected}
 
 
 def _xml_to_obj(element: ET.Element) -> dict[str, Any]:

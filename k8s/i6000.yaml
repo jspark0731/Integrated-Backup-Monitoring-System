@@ -25,13 +25,20 @@ data:
         protocol: rest
         enabled: true
         schedule:
-          interval_minutes: 5
-          minute_offset: 2
-          second: 0
+          fast:
+            interval_minutes: 5
+            minute_offset: 2
+            second: 0
+          slow:
+            interval_minutes: 60
+            minute_offset: 2
+            second: 30
         base_url: https://i6000_core_host_TO_BE_FILLED
         username_file: /app/secrets/i6000/i6000-core-username
         password_file: /app/secrets/i6000/i6000-core-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
         endpoints: &i6000_endpoints
           ping: aml/
           physical_library: aml/physicalLibrary
@@ -49,39 +56,60 @@ data:
         protocol: rest
         enabled: true
         schedule:
-          interval_minutes: 5
-          minute_offset: 2
-          second: 0
+          fast:
+            interval_minutes: 5
+            minute_offset: 2
+            second: 0
+          slow:
+            interval_minutes: 60
+            minute_offset: 2
+            second: 30
         base_url: https://i6000_chnl_host_TO_BE_FILLED
         username_file: /app/secrets/i6000/i6000-chnl-username
         password_file: /app/secrets/i6000/i6000-chnl-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
         endpoints: *i6000_endpoints
       - name: i6000_info_rest
         type: i6000
         protocol: rest
         enabled: true
         schedule:
-          interval_minutes: 5
-          minute_offset: 2
-          second: 0
+          fast:
+            interval_minutes: 5
+            minute_offset: 2
+            second: 0
+          slow:
+            interval_minutes: 60
+            minute_offset: 2
+            second: 30
         base_url: https://i6000_info_host_TO_BE_FILLED
         username_file: /app/secrets/i6000/i6000-info-username
         password_file: /app/secrets/i6000/i6000-info-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
         endpoints: *i6000_endpoints
       - name: i6000_ifrs_rest
         type: i6000
         protocol: rest
         enabled: true
         schedule:
-          interval_minutes: 5
-          minute_offset: 2
-          second: 0
+          fast:
+            interval_minutes: 5
+            minute_offset: 2
+            second: 0
+          slow:
+            interval_minutes: 60
+            minute_offset: 2
+            second: 30
         base_url: https://i6000_ifrs_host_TO_BE_FILLED
         username_file: /app/secrets/i6000/i6000-ifrs-username
         password_file: /app/secrets/i6000/i6000-ifrs-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
         endpoints: *i6000_endpoints
 ---
 apiVersion: apps/v1

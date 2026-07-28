@@ -18,13 +18,20 @@ collectors:
     protocol: rest
     enabled: true
     schedule:
-      interval_minutes: 5
-      minute_offset: 2
-      second: 0
+      fast:
+        interval_minutes: 5
+        minute_offset: 2
+        second: 0
+      slow:
+        interval_minutes: 60
+        minute_offset: 2
+        second: 30
     base_url: https://i6000_core_host_TO_BE_FILLED
     username: i6000_core_username_TO_BE_FILLED
     password: i6000_core_password_TO_BE_FILLED
     verify_tls: true
+    rest:
+      max_concurrency: 4
     endpoints: &i6000_endpoints
       ping: aml/
       physical_library: aml/physicalLibrary
@@ -43,13 +50,20 @@ collectors:
     protocol: rest
     enabled: true
     schedule:
-      interval_minutes: 5
-      minute_offset: 2
-      second: 0
+      fast:
+        interval_minutes: 5
+        minute_offset: 2
+        second: 0
+      slow:
+        interval_minutes: 60
+        minute_offset: 2
+        second: 30
     base_url: https://i6000_chnl_host_TO_BE_FILLED
     username: i6000_chnl_username_TO_BE_FILLED
     password: i6000_chnl_password_TO_BE_FILLED
     verify_tls: true
+    rest:
+      max_concurrency: 4
     endpoints: *i6000_endpoints
 
   - name: i6000_info_rest
@@ -57,13 +71,20 @@ collectors:
     protocol: rest
     enabled: true
     schedule:
-      interval_minutes: 5
-      minute_offset: 2
-      second: 0
+      fast:
+        interval_minutes: 5
+        minute_offset: 2
+        second: 0
+      slow:
+        interval_minutes: 60
+        minute_offset: 2
+        second: 30
     base_url: https://i6000_info_host_TO_BE_FILLED
     username: i6000_info_username_TO_BE_FILLED
     password: i6000_info_password_TO_BE_FILLED
     verify_tls: true
+    rest:
+      max_concurrency: 4
     endpoints: *i6000_endpoints
 
   - name: i6000_ifrs_rest
@@ -71,11 +92,18 @@ collectors:
     protocol: rest
     enabled: true
     schedule:
-      interval_minutes: 5
-      minute_offset: 2
-      second: 0
+      fast:
+        interval_minutes: 5
+        minute_offset: 2
+        second: 0
+      slow:
+        interval_minutes: 60
+        minute_offset: 2
+        second: 30
     base_url: https://i6000_ifrs_host_TO_BE_FILLED
     username: i6000_ifrs_username_TO_BE_FILLED
     password: i6000_ifrs_password_TO_BE_FILLED
     verify_tls: true
+    rest:
+      max_concurrency: 4
     endpoints: *i6000_endpoints

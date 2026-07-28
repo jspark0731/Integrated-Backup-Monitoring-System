@@ -77,6 +77,9 @@ class BaseCollector(ABC):
         """Compatibility hook until a collector provides class-specific collection."""
         return await self._collect_payload()
 
+    async def close(self) -> None:
+        """Release collector-owned resources during application shutdown."""
+
     @abstractmethod
     async def _collect_payload(self) -> dict:
         raise NotImplementedError

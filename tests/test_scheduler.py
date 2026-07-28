@@ -49,12 +49,13 @@ class RecordingCollector(BaseCollector):
 class RecordingWriter:
     def __init__(self) -> None:
         self.results = []
+        self.closed = False
 
     async def write_many(self, results) -> None:
         self.results.extend(results)
 
     async def close(self) -> None:
-        return None
+        self.closed = True
 
 
 @pytest.mark.asyncio
@@ -214,3 +215,23 @@ async def test_one_collector_failure_does_not_stop_another(monkeypatch) -> None:
 
     assert healthy.calls >= 1
     assert failing.calls >= 2
+
+
+@pytest.mark.asyncio
+async def test_stop_closes_collector_resources_and_writer() -> None:
+    class CloseTrackingCollector(RecordingCollector):
+        def __init__(self, config: CollectorConfig) -> None:
+            super().__init__(config)
+            self.closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    collector = CloseTrackingCollector(scheduler_test_config())
+    writer = RecordingWriter()
+    scheduler = CollectorScheduler([collector], writer)
+
+    await scheduler.stop()
+
+    assert collector.closed
+    assert writer.closed

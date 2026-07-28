@@ -188,6 +188,41 @@ collectors:
     assert collector.skip_reason == "slow invalid schedule.second: 60"
 
 
+def test_rest_max_concurrency_loads_and_validates(tmp_path: Path) -> None:
+    config_path = tmp_path / "collector.yaml"
+    config_path.write_text(
+        """
+collectors:
+  - name: ZFS_1
+    type: ZFS
+    protocol: rest
+    enabled: true
+    base_url: https://zfs.example.com
+    token: secret
+    rest:
+      max_concurrency: 2
+""",
+        encoding="utf-8",
+    )
+
+    collector = load_config(config_path).collectors[0]
+
+    assert collector.rest_max_concurrency == 2
+    assert collector.skip_reason is None
+
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            "max_concurrency: 2",
+            "max_concurrency: 0",
+        ),
+        encoding="utf-8",
+    )
+
+    collector = load_config(config_path).collectors[0]
+
+    assert collector.skip_reason == "invalid rest.max_concurrency: 0"
+
+
 def test_config_loads_secret_values_from_files(tmp_path: Path) -> None:
     es_username = tmp_path / "es-username"
     es_password = tmp_path / "es-password"

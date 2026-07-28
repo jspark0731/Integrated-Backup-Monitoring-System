@@ -53,6 +53,17 @@ class CollectorScheduler:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
+        close_results = await asyncio.gather(
+            *(collector.close() for collector in self.collectors),
+            return_exceptions=True,
+        )
+        for collector, result in zip(self.collectors, close_results, strict=True):
+            if isinstance(result, BaseException):
+                LOGGER.error(
+                    "Failed to close collector %s",
+                    collector.name,
+                    exc_info=(type(result), result, result.__traceback__),
+                )
         await self.writer.close()
 
     async def run_once(self) -> list[CollectionResult]:

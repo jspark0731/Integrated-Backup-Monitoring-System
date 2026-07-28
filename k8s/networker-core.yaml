@@ -19,12 +19,16 @@ data:
         type: Networker
         protocol: rest
         enabled: true
-        schedule: {interval_minutes: 5, minute_offset: 3, second: 0}
+        schedule:
+          fast: {interval_minutes: 5, minute_offset: 3, second: 0}
+          slow: {interval_minutes: 60, minute_offset: 3, second: 30}
         base_url: networker_core_base_url_TO_BE_FILLED
         token_file: /app/secrets/networker-token
         username_file: /app/secrets/networker-username
         password_file: /app/secrets/networker-password
         verify_tls: true
+        rest:
+          max_concurrency: 4
         source_networker: core
         classification:
           hostname_csv_path: /app/config/hostname_domain.csv
