@@ -89,6 +89,11 @@ class CollectorConfig:
     rest_max_concurrency: int = 4
     commands: dict[str, str] = field(default_factory=dict)
     ssh_key_path: str | None = None
+    ssh_known_hosts_path: str | None = None
+    jump_host: str | None = None
+    jump_port: int = 22
+    jump_username: str | None = None
+    jump_ssh_key_path: str | None = None
     command_timeout: int = 30
     source_networker: str | None = None
     hostname_csv_path: str | None = None
@@ -196,6 +201,16 @@ class CollectorConfig:
             return "SSH config contains TO_BE_FILLED values"
         if not self.commands:
             return "SSH command list is empty"
+        if self.jump_host:
+            jump_required = {
+                "jump_host": self.jump_host,
+                "jump_username": self.jump_username,
+                "ssh_known_hosts_path": self.ssh_known_hosts_path,
+            }
+            if has_unfilled_values(jump_required):
+                return "SSH jump config contains TO_BE_FILLED values"
+            if not self.jump_ssh_key_path and not self.ssh_key_path:
+                return "SSH jump config requires jump_ssh_key_path or ssh_key_path"
         return None
 
     def _cli_snmp_skip_reason(self) -> str | None:
@@ -286,6 +301,11 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         rest_max_concurrency=int((raw.get("rest") or {}).get("max_concurrency", 4)),
         commands=dict(raw.get("commands", {})),
         ssh_key_path=_optional(raw.get("ssh_key_path")),
+        ssh_known_hosts_path=_optional(raw.get("ssh_known_hosts_path")),
+        jump_host=_optional(raw.get("jump_host")),
+        jump_port=int(raw.get("jump_port", 22)),
+        jump_username=_optional(raw.get("jump_username")),
+        jump_ssh_key_path=_optional(raw.get("jump_ssh_key_path")),
         command_timeout=int(raw.get("command_timeout", 30)),
         source_networker=_optional(raw.get("source_networker")),
         hostname_csv_path=_optional((raw.get("classification") or {}).get("hostname_csv_path")),

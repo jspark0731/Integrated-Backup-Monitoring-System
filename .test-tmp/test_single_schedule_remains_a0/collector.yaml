@@ -1,0 +1,14 @@
+
+collectors:
+  - name: DD4500
+    type: DD
+    protocol: snmp
+    enabled: true
+    schedule:
+      interval_minutes: 5
+      minute_offset: 1
+      second: 0
+    host: 192.0.2.10
+    community: public
+    oids:
+      state: 1.3.6.1.4.1.19746.1.1.1.0

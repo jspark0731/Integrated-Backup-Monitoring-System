@@ -1,0 +1,14 @@
+
+collectors:
+  - name: ZFS_1
+    type: ZFS
+    protocol: rest
+    enabled: true
+    schedule:
+      fast:
+        interval_minutes: 5
+      slow:
+        interval_minutes: 60
+        second: 60
+    base_url: https://zfs.example.com
+    token: secret

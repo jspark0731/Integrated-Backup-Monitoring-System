@@ -1,0 +1,21 @@
+
+app:
+  name: test
+elasticsearch:
+  enabled: true
+  username_file: D:\Backup Dashboard\.test-tmp\test_config_loads_secret_value0\es-username
+  password_file: D:\Backup Dashboard\.test-tmp\test_config_loads_secret_value0\es-password
+  ca_certs: /app/secrets/elasticsearch/ca.crt
+collectors:
+  - name: DXi_1
+    type: DXi
+    protocol: cli_snmp
+    enabled: true
+    host: 192.0.2.10
+    community_file: D:\Backup Dashboard\.test-tmp\test_config_loads_secret_value0\dxi-community
+    username_file: D:\Backup Dashboard\.test-tmp\test_config_loads_secret_value0\dxi-username
+    password_file: D:\Backup Dashboard\.test-tmp\test_config_loads_secret_value0\dxi-password
+    oids:
+      state: 1.3.6.1.4.1.2036.2.1.1.7.0
+    commands:
+      status: show status

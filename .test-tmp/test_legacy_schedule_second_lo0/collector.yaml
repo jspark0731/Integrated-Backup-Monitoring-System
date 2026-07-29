@@ -1,0 +1,15 @@
+
+app:
+  name: test
+collectors:
+  - name: networker_core
+    type: Networker
+    protocol: rest
+    enabled: true
+    schedule_second: 30
+    base_url: https://networker.example.com:9090
+    username: admin
+    password: secret
+    source_networker: core
+    classification:
+      hostname_csv_path: /app/config/hostname_domain.csv

@@ -1,0 +1,18 @@
+
+collectors:
+  - name: i6000_core_rest
+    type: i6000
+    protocol: rest
+    enabled: true
+    schedule:
+      fast:
+        interval_minutes: 5
+        minute_offset: 2
+      slow:
+        interval_minutes: 60
+        minute_offset: 2
+    base_url: https://i6000.example.com
+    username: admin
+    password: secret
+    endpoints:
+      status: aml/physicalLibrary/status

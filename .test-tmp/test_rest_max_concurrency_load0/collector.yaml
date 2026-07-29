@@ -1,0 +1,10 @@
+
+collectors:
+  - name: ZFS_1
+    type: ZFS
+    protocol: rest
+    enabled: true
+    base_url: https://zfs.example.com
+    token: secret
+    rest:
+      max_concurrency: 0

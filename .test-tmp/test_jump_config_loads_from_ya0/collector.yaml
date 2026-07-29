@@ -1,0 +1,15 @@
+
+collectors:
+  - name: DXi_1
+    type: DXi
+    protocol: cli_snmp
+    host: vtl.example
+    username: root
+    ssh_key_path: /app/secrets/ssh/id_ed25519
+    ssh_known_hosts_path: /app/secrets/ssh/known_hosts
+    jump_host: relay.example
+    jump_port: 2222
+    jump_username: "123456789"
+    jump_ssh_key_path: /app/secrets/ssh/id_ed25519
+    commands:
+      status: show status
