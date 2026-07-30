@@ -235,24 +235,90 @@ def test_zfs_rest_collector_uses_default_endpoint_map() -> None:
 def test_dxi_cli_parser_extracts_summary_values() -> None:
     summary = parse_dxi_cli_outputs(
         {
-            "status": "Device Name: DXi_1\nState: online\n",
-            "capacity": "Total Capacity: 100 TB\nUsed Capacity: 72 TB\n",
-            "dedup": "Deduplication Ratio: 12.5:1\n",
-            "replication": "target-a: enabled\n",
-            "interfaces": "eth0: up\neth1: down\n",
-            "alerts": "Critical Alerts: 2\nWarning Alerts: 3\n",
+            "common_components": """
+  [Common Component = 1]
+    Component Name = Storage Arrays
+    Status = Normal
+""",
+            "storage_arrays": """
+  [Array = 1]
+    Name = Qarray1
+    Status = Normal
+""",
+            "system_board": """
+  [Component = 1]
+    Name = Fan 1 RPM
+    Type = Fan
+    Value = 3840 RPM
+    Status = Normal
+""",
+            "capacity": """
+    Disk Capacity = 25.84 TB
+    Available Disk Space = 5.91 TB
+    - Free Space = 1.86 TB  (7.21% of capacity)
+    - Reclaimable Space = 4.05 TB  (15.67% of capacity)
+    Used Disk Space = 19.93 TB
+    - Deduplicated Data = 17.85 TB  (69.10% of capacity)
+    - System Metadata = 2.07 TB  (8.02% of capacity)
+""",
+            "dedup": """
+    Data Size Before Reduction = 80.95 TB
+    Data Size After Reduction = 17.85 TB
+    Total Reduction Ratio = 4.53 : 1
+    - Deduplication Ratio = 2.35 : 1
+    - Compression Ratio = 1.93 : 1
+""",
+            "vtls": """
+  [vtl = 1]
+    name = DXI6801_VTL1
+    mode = online
+    model = ADIC Scalar i2000
+    drivemodel = IBM LTO-3
+    drives = 52
+    media = 300
+    slots = 300
+    ieslots = 240
+    serial = REDACTED
+    dedup = enabled
+    replication = disabled
+""",
+            "interfaces": """
+  [Port = 1]
+    Name = ETH1
+    Value = 1000 Mb/s
+    Status = Up
+  [Port = 2]
+    Name = ETH2
+    Value = NA
+    Status = Down
+""",
+            "network_config": "HOSTNAME=P1-VTL\nGATEWAY=192.0.2.1\n",
+            "admin_alerts": """
+  [Alert Number = 1]
+    Alert = SpaceManagementDaemon
+    Last Update = 2026-06-21T20:36:23+00:00
+    Summary = Space Management: Cleared Low Space Mode
+""",
+            "service_tickets": "",
         },
         fallback_name="DXi_1",
     )
 
-    assert summary["device_name"] == "DXi_1"
-    assert summary["state"] == "online"
-    assert summary["capacity"]["total_bytes"] == 100_000_000_000_000
-    assert summary["capacity"]["used_percent"] == 72
-    assert summary["dedup_ratio"] == 12.5
-    assert summary["replication"][0]["up"] == 1
+    assert summary["device_name"] == "P1-VTL"
+    assert summary["state"] == "normal"
+    assert summary["capacity"]["total_bytes"] == 25_840_000_000_000
+    assert summary["capacity"]["available_bytes"] == 5_910_000_000_000
+    assert summary["capacity"]["used_percent"] == pytest.approx(77.128, abs=0.001)
+    assert summary["dedup_ratio"] == 2.35
+    assert summary["data_reduction"]["total_reduction_ratio"] == 4.53
+    assert summary["data_reduction"]["compression_ratio"] == 1.93
+    assert summary["vtls"][0]["dedup_enabled"] is True
+    assert summary["vtls"][0]["replication_enabled"] is False
+    assert summary["vtls"][0]["drive_count"] == 52
     assert summary["interfaces"][1]["up"] == 0
-    assert summary["alert_counts"]["critical"] == 2
+    assert summary["interfaces"][0]["speed_bps"] == 1_000_000_000
+    assert summary["alert_counts"]["unclassified"] == 1
+    assert summary["alert_counts"]["total"] == 1
 
 
 def test_i6000_rest_parser_extracts_tape_summary_values() -> None:

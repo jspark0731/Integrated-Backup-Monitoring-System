@@ -4,84 +4,203 @@ import re
 from typing import Any
 
 
+_STATUS_RANK = {"normal": 0, "unknown": 1, "warning": 2, "critical": 3}
+
+
 def parse_dxi_cli_outputs(outputs: dict[str, str], fallback_name: str) -> dict[str, Any]:
-    combined = "\n".join(outputs.values())
-    capacity_text = outputs.get("capacity", combined)
-    dedup_text = outputs.get("dedup", combined)
-    replication_text = outputs.get("replication", "")
-    interfaces_text = outputs.get("interfaces", "")
-    alerts_text = outputs.get("alerts", combined)
-    status_text = outputs.get("status", combined)
+    hardware = {
+        "common_components": _parse_records(outputs.get("common_components", "")),
+        "storage_arrays": _parse_records(outputs.get("storage_arrays", "")),
+        "system_board": _parse_records(outputs.get("system_board", "")),
+    }
+    vtls = _parse_vtls(outputs.get("vtls", ""))
+    admin_alerts = _parse_records(outputs.get("admin_alerts", ""))
+    service_tickets = _parse_records(outputs.get("service_tickets", ""))
+    state = _overall_hardware_state(hardware)
+    hostname = _first_match(
+        outputs.get("network_config", ""),
+        [r"^Hostname\s*=\s*([^\r\n]+)", r"^HOSTNAME\s*=\s*([^\r\n]+)"],
+    )
+    reduction = _parse_data_reduction(outputs.get("dedup", ""))
+    alert_counts = _alert_counts(admin_alerts, service_tickets)
 
     return {
-        "device_name": _first_match(status_text, [r"(?:Device|System|Host)\s+Name\s*[:=]\s*(.+)", r"Name\s*[:=]\s*(.+)"])
-        or fallback_name,
-        "state": _first_match(status_text, [r"(?:State|Status)\s*[:=]\s*([A-Za-z][\w -]+)"]),
-        "capacity": _parse_capacity(capacity_text),
-        "dedup_ratio": _parse_dedup_ratio(dedup_text),
-        "replication": _parse_named_states(replication_text, default_name="replication"),
-        "interfaces": _parse_named_states(interfaces_text, default_name="interface"),
-        "alert_counts": _parse_alert_counts(alerts_text),
+        "device_name": hostname or fallback_name,
+        "state": state,
+        "capacity": _parse_capacity(outputs.get("capacity", "")),
+        # Kept for the existing Prometheus and Elasticsearch consumers.
+        "dedup_ratio": reduction["deduplication_ratio"],
+        "data_reduction": reduction,
+        "hardware": hardware,
+        "vtls": vtls,
+        "interfaces": _parse_interfaces(outputs.get("interfaces", "")),
+        "network": _parse_network_config(outputs.get("network_config", "")),
+        "admin_alerts": admin_alerts,
+        "service_tickets": service_tickets,
+        "alert_counts": alert_counts,
     }
 
 
 def _parse_capacity(text: str) -> dict[str, float | None]:
-    total = _parse_size(_first_match(text, [r"Total(?:\s+Capacity)?\s*[:=]\s*([\d.]+\s*[KMGTPE]?i?B)", r"Capacity\s*[:=]\s*([\d.]+\s*[KMGTPE]?i?B)"]))
-    used = _parse_size(_first_match(text, [r"Used(?:\s+Capacity)?\s*[:=]\s*([\d.]+\s*[KMGTPE]?i?B)", r"Disk\s+Used\s*[:=]\s*([\d.]+\s*[KMGTPE]?i?B)"]))
-    used_percent = _parse_float(
-        _first_match(text, [r"Used\s*(?:Percent|%)\s*[:=]\s*([\d.]+)\s*%?", r"Capacity\s+Used\s*[:=]\s*([\d.]+)\s*%"])
-    )
-    if used_percent is None and total and used:
-        used_percent = round((used / total) * 100, 3)
+    total = _size_field(text, "Disk Capacity")
+    available = _size_field(text, "Available Disk Space")
+    free = _size_field(text, "Free Space")
+    reclaimable = _size_field(text, "Reclaimable Space")
+    used = _size_field(text, "Used Disk Space")
+    deduplicated = _size_field(text, "Deduplicated Data")
+    metadata = _size_field(text, "System Metadata")
+    not_deduplicated = _size_field(text, "Data Not Intended for Deduplication")
+    used_percent = round((used / total) * 100, 3) if total and used is not None else None
     return {
         "total_bytes": total,
         "used_bytes": used,
+        "available_bytes": available,
+        "free_bytes": free,
+        "reclaimable_bytes": reclaimable,
+        "deduplicated_bytes": deduplicated,
+        "metadata_bytes": metadata,
+        "not_deduplicated_bytes": not_deduplicated,
         "used_percent": used_percent,
     }
 
 
-def _parse_dedup_ratio(text: str) -> float | None:
-    value = _first_match(text, [r"(?:Dedup(?:lication)?|Reduction)\s+(?:Ratio|Rate)\s*[:=]\s*([\d.]+)\s*:?\s*1?", r"Dedup\s*[:=]\s*([\d.]+)"])
-    return _parse_float(value)
+def _parse_data_reduction(text: str) -> dict[str, float | None]:
+    return {
+        "before_bytes": _size_field(text, "Data Size Before Reduction"),
+        "after_bytes": _size_field(text, "Data Size After Reduction"),
+        "total_reduction_ratio": _ratio_field(text, "Total Reduction Ratio"),
+        "deduplication_ratio": _ratio_field(text, "Deduplication Ratio"),
+        "compression_ratio": _ratio_field(text, "Compression Ratio"),
+    }
 
 
-def _parse_alert_counts(text: str) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for severity in ("critical", "warning", "error", "info", "informational"):
-        value = _first_match(text, [rf"{severity}\s*(?:alerts?|tickets?|count)?\s*[:=]\s*(\d+)"])
-        if value is not None:
-            normalized = "info" if severity == "informational" else severity
-            counts[normalized] = int(value)
-    return counts
-
-
-def _parse_named_states(text: str, *, default_name: str) -> list[dict[str, Any]]:
+def _parse_vtls(text: str) -> list[dict[str, Any]]:
     rows = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or set(stripped) <= {"-", "=", " "}:
+    for record in _parse_records(text):
+        if "name" not in record:
             continue
-
-        key_value = re.match(r"(?P<name>[A-Za-z0-9_.:/-]+(?:\s+[A-Za-z0-9_.:/-]+)?)\s*[:=]\s*(?P<state>[A-Za-z][\w -]+)$", stripped)
-        tableish = re.match(r"(?P<name>[A-Za-z0-9_.:/-]+)\s{2,}(?P<state>[A-Za-z][\w -]+)$", stripped)
-        match = key_value or tableish
-        if not match:
-            continue
-
-        state = match.group("state").strip()
         rows.append(
             {
-                "name": match.group("name").strip() or default_name,
-                "state": state,
-                "up": 1 if _state_is_up(state) else 0,
+                "name": record.get("name"),
+                "mode": _lower(record.get("mode")),
+                "online": 1 if _lower(record.get("mode")) == "online" else 0,
+                "model": record.get("model"),
+                "drive_model": record.get("drivemodel"),
+                "drive_count": _int(record.get("drives")),
+                "media_count": _int(record.get("media")),
+                "slot_count": _int(record.get("slots")),
+                "ie_slot_count": _int(record.get("ieslots")),
+                "serial": record.get("serial"),
+                "dedup_enabled": _lower(record.get("dedup")) == "enabled",
+                "replication_enabled": _lower(record.get("replication")) == "enabled",
             }
         )
     return rows
 
 
-def _state_is_up(value: str) -> bool:
+def _parse_interfaces(text: str) -> list[dict[str, Any]]:
+    rows = []
+    for record in _parse_records(text):
+        name = record.get("Name")
+        if not name:
+            continue
+        status = _lower(record.get("Status")) or "unknown"
+        speed = _first_match(str(record.get("Value", "")), [r"([\d.]+)\s*Mb/s"])
+        rows.append(
+            {
+                "name": name,
+                "state": status,
+                "up": 1 if status == "up" else 0,
+                "speed_bps": float(speed) * 1_000_000 if speed else None,
+            }
+        )
+    return rows
+
+
+def _parse_network_config(text: str) -> dict[str, Any]:
+    hostname = _first_match(text, [r"^Hostname\s*=\s*([^\r\n]+)", r"^HOSTNAME\s*=\s*([^\r\n]+)"])
+    gateway = _first_match(text, [r"^GATEWAY\s*=\s*([^\r\n]+)"])
+    configured = []
+    for block in re.split(r"^\*{5,}\s*$", text, flags=re.MULTILINE):
+        device = _first_match(block, [r"^DEVICE\s*=\s*([^\r\n]+)"])
+        if not device:
+            continue
+        configured.append(
+            {
+                "name": device,
+                "type": _first_match(block, [r"^TYPE\s*=\s*([^\r\n]+)"]),
+                "master": _first_match(block, [r"^MASTER\s*=\s*([^\r\n]+)"]),
+                "ip_address": _first_match(block, [r"^IPADDR\s*=\s*([^\r\n]+)"]),
+                "netmask": _first_match(block, [r"^NETMASK\s*=\s*([^\r\n]+)"]),
+                "mtu": _int(_first_match(block, [r"^MTU\s*=\s*(\d+)"])),
+            }
+        )
+    return {"hostname": hostname, "gateway": gateway, "configured_interfaces": configured}
+
+
+def _parse_records(text: str) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    for line in text.splitlines():
+        if re.match(r"^\s*\[[^]]+\]\s*$", line):
+            if current:
+                records.append(current)
+            current = {}
+            continue
+        match = re.match(r"^\s*([^=]+?)\s*=\s*(.*?)\s*$", line)
+        if match and current is not None:
+            current[match.group(1).strip()] = match.group(2).strip()
+    if current:
+        records.append(current)
+    return records
+
+
+def _overall_hardware_state(hardware: dict[str, list[dict[str, str]]]) -> str:
+    overall = "normal"
+    found = False
+    for records in hardware.values():
+        for record in records:
+            if "Status" not in record:
+                continue
+            found = True
+            normalized = _normalize_status(record["Status"])
+            if _STATUS_RANK[normalized] > _STATUS_RANK[overall]:
+                overall = normalized
+    return overall if found else "unknown"
+
+
+def _normalize_status(value: str) -> str:
     normalized = value.strip().lower()
-    return normalized in {"up", "online", "enabled", "ok", "good", "healthy", "running", "active", "available", "success"}
+    if normalized in {"normal", "ok", "up", "online", "healthy"}:
+        return "normal"
+    if normalized in {"warning", "degraded"}:
+        return "warning"
+    if normalized in {"critical", "failed", "failure", "error"}:
+        return "critical"
+    return "unknown"
+
+
+def _alert_counts(admin_alerts: list[dict[str, str]], tickets: list[dict[str, str]]) -> dict[str, int]:
+    counts = {"critical": 0, "warning": 0, "info": 0, "unclassified": len(admin_alerts)}
+    priority_map = {"high": "critical", "middle": "warning", "low": "info"}
+    for ticket in tickets:
+        severity = priority_map.get(_lower(ticket.get("Priority")))
+        if severity:
+            counts[severity] += 1
+        else:
+            counts["unclassified"] += 1
+    counts["total"] = len(admin_alerts) + len(tickets)
+    return counts
+
+
+def _size_field(text: str, label: str) -> float | None:
+    value = _first_match(text, [rf"^\s*-?\s*{re.escape(label)}\s*=\s*([\d.]+\s*[KMGTPE]?i?B)"])
+    return _parse_size(value)
+
+
+def _ratio_field(text: str, label: str) -> float | None:
+    value = _first_match(text, [rf"^\s*-?\s*{re.escape(label)}\s*=\s*([\d.]+)\s*:\s*1"])
+    return _float(value)
 
 
 def _first_match(text: str, patterns: list[str]) -> str | None:
@@ -92,32 +211,33 @@ def _first_match(text: str, patterns: list[str]) -> str | None:
     return None
 
 
-def _parse_float(value: str | None) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except ValueError:
-        return None
-
-
 def _parse_size(value: str | None) -> float | None:
     if value is None:
         return None
-
     match = re.match(r"([\d.]+)\s*([KMGTPE]?i?B)", value.strip(), flags=re.IGNORECASE)
     if not match:
         return None
-
     number = float(match.group(1))
-    unit = match.group(2).upper().replace("IB", "B")
-    multipliers = {
-        "B": 1,
-        "KB": 1000,
-        "MB": 1000**2,
-        "GB": 1000**3,
-        "TB": 1000**4,
-        "PB": 1000**5,
-        "EB": 1000**6,
-    }
-    return number * multipliers.get(unit, 1)
+    unit = match.group(2).upper()
+    binary = "IB" in unit
+    exponent = {"B": 0, "KB": 1, "KIB": 1, "MB": 2, "MIB": 2, "GB": 3, "GIB": 3,
+                "TB": 4, "TIB": 4, "PB": 5, "PIB": 5, "EB": 6, "EIB": 6}[unit]
+    return int(round(number * ((1024 if binary else 1000) ** exponent)))
+
+
+def _lower(value: Any) -> str:
+    return str(value).strip().lower() if value is not None else ""
+
+
+def _float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

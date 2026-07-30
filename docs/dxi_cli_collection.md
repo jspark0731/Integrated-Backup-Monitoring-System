@@ -43,13 +43,17 @@ Use `protocol: cli_snmp` for DXi collection.
   oids:
     state: 1.3.6.1.4.1.2036.2.1.1.7.0
     serial_number: 1.3.6.1.4.1.2036.2.1.1.12.0
-  commands:
-    status: "show status"
-    capacity: "show capacity"
-    dedup: "show dedup"
-    replication: "show replication"
-    interfaces: "show network"
-    alerts: "show alerts"
+        commands:
+          common_components: "syscli --getstatus commoncomponent"
+          storage_arrays: "syscli --getstatus storagearray"
+          system_board: "syscli --getstatus systemboard"
+          capacity: "syscli --get diskusage"
+          dedup: "syscli --get datareductionstat"
+          vtls: "syscli --list vtl"
+          interfaces: "syscli --getstatus networkport"
+          network_config: "syscli --show netcfg"
+          admin_alerts: "syscli --list adminalert"
+          service_tickets: "syscli --list serviceticket --open"
 ```
 
 If key-based authentication is preferred, set `ssh_key_path` instead of
@@ -59,8 +63,12 @@ If key-based authentication is preferred, set `ssh_key_path` instead of
 ssh_key_path: /run/secrets/dxi_ssh_key
 ```
 
-The command names on the left are parser inputs. The command strings on the
-right can be adjusted to match the actual DXi CLI.
+The command names on the left are parser inputs. These commands model the
+DXi6802 output used by this deployment. Replication polling is intentionally
+omitted because both configured VTL appliances have replication disabled.
+`No open tickets available` from the service-ticket command is normalized to
+an empty successful result; other individual command failures are retained in
+`command_errors` and mark the payload as `partial`.
 
 ## Parsed Payload
 
@@ -78,9 +86,14 @@ The collector stores normalized and raw CLI/SNMP output together in
       "used_bytes": 72000000000000,
       "used_percent": 72.0
     },
-    "dedup_ratio": 12.5,
-    "replication": [
-      {"name": "target-a", "state": "enabled", "up": 1}
+    "dedup_ratio": 2.35,
+    "data_reduction": {
+      "total_reduction_ratio": 4.53,
+      "deduplication_ratio": 2.35,
+      "compression_ratio": 1.93
+    },
+    "vtls": [
+      {"name": "VTL1", "mode": "online", "dedup_enabled": true}
     ],
     "interfaces": [
       {"name": "eth0", "state": "up", "up": 1}
@@ -106,9 +119,12 @@ backup_device_up{device_type="dxi",device_name="DXi_1"} 1
 backup_device_capacity_total_bytes{device_type="dxi",device_name="DXi_1"} 100000000000000
 backup_device_capacity_used_bytes{device_type="dxi",device_name="DXi_1"} 72000000000000
 backup_device_capacity_used_percent{device_type="dxi",device_name="DXi_1"} 72
-backup_device_dedup_ratio{device_type="dxi",device_name="DXi_1"} 12.5
+backup_device_dedup_ratio{device_type="dxi",device_name="DXi_1"} 2.35
+backup_dxi_total_reduction_ratio{device_name="DXi_1"} 4.53
+backup_dxi_compression_ratio{device_name="DXi_1"} 1.93
+backup_dxi_vtl_online{device_name="DXi_1",vtl="VTL1"} 1
+backup_dxi_vtl_dedup_enabled{device_name="DXi_1",vtl="VTL1"} 1
 backup_device_alert_count{device_type="dxi",device_name="DXi_1",severity="critical"} 0
-backup_device_replication_up{device_type="dxi",device_name="DXi_1",replication="target-a"} 1
 backup_device_interface_up{device_type="dxi",device_name="DXi_1",interface="eth0"} 1
 backup_collector_last_success_timestamp{collector="DXi_1"} 1710000000
 ```

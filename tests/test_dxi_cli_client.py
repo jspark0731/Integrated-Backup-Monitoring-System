@@ -102,7 +102,8 @@ def test_run_commands_uses_direct_tcpip_channel(monkeypatch) -> None:
 
     result = DxiCliClient(_config()).run_commands()
 
-    assert result == {"status": "State: online\n"}
+    assert result.outputs == {"status": "State: online\n"}
+    assert result.errors == {}
     transport.open_channel.assert_called_once_with(
         kind="direct-tcpip",
         dest_addr=("vtl.example", 22),
@@ -124,3 +125,38 @@ def test_run_commands_uses_direct_tcpip_channel(monkeypatch) -> None:
     channel.close.assert_called_once()
     jump_client.close.assert_called_once()
     vtl_client.close.assert_called_once()
+
+
+def test_no_open_service_tickets_is_treated_as_empty_success() -> None:
+    client = DxiCliClient(_config(commands={"service_tickets": "syscli --list serviceticket --open"}))
+    stdout = MagicMock()
+    stderr = MagicMock()
+    stdout.channel.recv_exit_status.return_value = 1
+    stdout.read.return_value = b""
+    stderr.read.return_value = (
+        b"ERROR: ListServiceticket: No open tickets available in Ticket List for display. (E11052062)\n"
+    )
+
+    output, error = client._run_command(MagicMock(exec_command=MagicMock(return_value=(MagicMock(), stdout, stderr))),
+                                        "service_tickets", "syscli --list serviceticket --open")
+
+    assert output == ""
+    assert error is None
+
+
+def test_failed_optional_command_is_returned_as_error() -> None:
+    client = DxiCliClient(_config())
+    stdout = MagicMock()
+    stderr = MagicMock()
+    stdout.channel.recv_exit_status.return_value = 2
+    stdout.read.return_value = b"partial output"
+    stderr.read.return_value = b"command failed"
+
+    output, error = client._run_command(
+        MagicMock(exec_command=MagicMock(return_value=(MagicMock(), stdout, stderr))),
+        "admin_alerts",
+        "syscli --list adminalert",
+    )
+
+    assert output == "partial output"
+    assert error == {"exit_status": 2, "message": "command failed"}

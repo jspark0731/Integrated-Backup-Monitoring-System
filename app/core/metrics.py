@@ -56,6 +56,12 @@ DEVICE_CAPACITY_USED_BYTES = Gauge(
     ["device_type", "device_name"],
 )
 
+DEVICE_CAPACITY_AVAILABLE_BYTES = Gauge(
+    "backup_device_capacity_available_bytes",
+    "Available device capacity in bytes",
+    ["device_type", "device_name"],
+)
+
 DEVICE_CAPACITY_USED_PERCENT = Gauge(
     "backup_device_capacity_used_percent",
     "Used device capacity percent",
@@ -66,6 +72,30 @@ DEVICE_DEDUP_RATIO = Gauge(
     "backup_device_dedup_ratio",
     "Device deduplication ratio",
     ["device_type", "device_name"],
+)
+
+DXI_TOTAL_REDUCTION_RATIO = Gauge(
+    "backup_dxi_total_reduction_ratio",
+    "DXi total data reduction ratio",
+    ["device_name"],
+)
+
+DXI_COMPRESSION_RATIO = Gauge(
+    "backup_dxi_compression_ratio",
+    "DXi compression ratio",
+    ["device_name"],
+)
+
+DXI_VTL_ONLINE = Gauge(
+    "backup_dxi_vtl_online",
+    "DXi VTL state, 1 means online",
+    ["device_name", "vtl"],
+)
+
+DXI_VTL_DEDUP_ENABLED = Gauge(
+    "backup_dxi_vtl_dedup_enabled",
+    "DXi VTL deduplication state, 1 means enabled",
+    ["device_name", "vtl"],
 )
 
 DEVICE_ALERT_COUNT = Gauge(

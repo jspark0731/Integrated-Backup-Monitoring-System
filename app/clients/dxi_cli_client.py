@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import CollectorConfig
+
+
+@dataclass(frozen=True)
+class DxiCliResult:
+    outputs: dict[str, str]
+    errors: dict[str, dict[str, Any]]
 
 
 class DxiCliClient:
     def __init__(self, config: CollectorConfig) -> None:
         self.config = config
 
-    def run_commands(self) -> dict[str, str]:
+    def run_commands(self) -> DxiCliResult:
         import paramiko
 
         client = self._new_client(paramiko)
@@ -33,10 +40,14 @@ class DxiCliClient:
                 )
 
             client.connect(**self._connect_kwargs(sock=channel))
-            return {
-                name: self._run_command(client, name, command)
-                for name, command in self.config.commands.items()
-            }
+            outputs: dict[str, str] = {}
+            errors: dict[str, dict[str, Any]] = {}
+            for name, command in self.config.commands.items():
+                output, error = self._run_command(client, name, command)
+                outputs[name] = output
+                if error is not None:
+                    errors[name] = error
+            return DxiCliResult(outputs=outputs, errors=errors)
         finally:
             client.close()
             if channel is not None:
@@ -85,11 +96,14 @@ class DxiCliClient:
             "allow_agent": False,
         }
 
-    def _run_command(self, client: Any, name: str, command: str) -> str:
+    def _run_command(self, client: Any, name: str, command: str) -> tuple[str, dict[str, Any] | None]:
         _, stdout, stderr = client.exec_command(command, timeout=self.config.command_timeout)
         exit_status = stdout.channel.recv_exit_status()
         output = stdout.read().decode("utf-8", errors="replace")
         error = stderr.read().decode("utf-8", errors="replace")
-        if exit_status != 0:
-            raise RuntimeError(f"DXi CLI command failed: {name} ({exit_status}) {error.strip()}")
-        return output
+        if exit_status == 0:
+            return output, None
+        message = error.strip() or output.strip()
+        if name == "service_tickets" and "No open tickets available" in message:
+            return "", None
+        return output, {"exit_status": exit_status, "message": message}
