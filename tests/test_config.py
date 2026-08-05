@@ -226,12 +226,10 @@ collectors:
 def test_config_loads_secret_values_from_files(tmp_path: Path) -> None:
     es_username = tmp_path / "es-username"
     es_password = tmp_path / "es-password"
-    dxi_community = tmp_path / "dxi-community"
     dxi_username = tmp_path / "dxi-username"
     dxi_password = tmp_path / "dxi-password"
     es_username.write_text("elastic\n", encoding="utf-8")
     es_password.write_text("elastic-password\n", encoding="utf-8")
-    dxi_community.write_text("public\n", encoding="utf-8")
     dxi_username.write_text("dxi-user\n", encoding="utf-8")
     dxi_password.write_text("dxi-password\n", encoding="utf-8")
 
@@ -248,14 +246,11 @@ elasticsearch:
 collectors:
   - name: DXi_1
     type: DXi
-    protocol: cli_snmp
+    protocol: cli
     enabled: true
     host: 192.0.2.10
-    community_file: {dxi_community}
     username_file: {dxi_username}
     password_file: {dxi_password}
-    oids:
-      state: 1.3.6.1.4.1.2036.2.1.1.7.0
     commands:
       status: show status
 """,
@@ -267,7 +262,6 @@ collectors:
     assert config.elasticsearch.username == "elastic"
     assert config.elasticsearch.password == "elastic-password"
     assert config.elasticsearch.ca_certs == "/app/secrets/elasticsearch/ca.crt"
-    assert config.collectors[0].community == "public"
     assert config.collectors[0].username == "dxi-user"
     assert config.collectors[0].password == "dxi-password"
     assert config.collectors[0].skip_reason is None

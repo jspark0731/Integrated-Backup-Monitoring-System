@@ -4,7 +4,7 @@ import pytest
 
 from app.collectors.factory import build_collector
 from app.collectors.dd_snmp_collector import DDSnmpCollector, parse_dd_snmp_payload
-from app.collectors.dxi_cli_snmp_collector import DXiCliSnmpCollector, parse_dxi_cli_outputs
+from app.collectors.dxi_cli_collector import DXiCliCollector, parse_dxi_cli_outputs
 from app.collectors.i6000_rest_collector import I6000RestCollector, parse_i6000_rest_payload
 from app.collectors.networker_rest_collector import NetworkerRestCollector, parse_networker_rest_payload
 from app.collectors.zfs_rest_collector import ZfsRestCollector, parse_zfs_rest_payload
@@ -116,8 +116,8 @@ def test_dd_snmp_collector_accepts_data_domain_mib_oids() -> None:
     assert collector.config.skip_reason is None
 
 
-def test_dxi_standalone_ssh_collector_is_rejected() -> None:
-    with pytest.raises(ValueError, match="DXi standalone"):
+def test_dxi_legacy_ssh_collector_is_rejected() -> None:
+    with pytest.raises(ValueError, match="DXi SNMP/legacy"):
         build_collector(
             CollectorConfig(
                 name="DXi_1_legacy_ssh",
@@ -134,26 +134,23 @@ def test_dxi_standalone_ssh_collector_is_rejected() -> None:
         )
 
 
-def test_dxi_cli_snmp_collector_accepts_combined_config() -> None:
+def test_dxi_cli_collector_accepts_cli_config() -> None:
     collector = build_collector(
         CollectorConfig(
             name="DXi_1",
             type="DXi",
-            protocol="cli_snmp",
+            protocol="cli",
             enabled=True,
             schedule_second=0,
             host="192.0.2.20",
-            snmp_port=161,
             ssh_port=22,
-            community="public",
             username="admin",
             password="secret",
-            oids={"state": "1.3.6.1.4.1.2036.2.1.1.7.0"},
             commands={"capacity": "show capacity"},
         )
     )
 
-    assert isinstance(collector, DXiCliSnmpCollector)
+    assert isinstance(collector, DXiCliCollector)
     assert collector.config.skip_reason is None
 
 

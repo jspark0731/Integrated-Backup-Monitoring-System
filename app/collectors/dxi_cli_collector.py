@@ -4,7 +4,6 @@ import asyncio
 from typing import Any
 
 from app.clients.dxi_cli_client import DxiCliClient
-from app.clients.snmp_client import SnmpClient
 from app.collectors.base import BaseCollector
 from app.core.metrics import (
     DEVICE_ALERT_COUNT,
@@ -23,9 +22,8 @@ from app.core.metrics import (
 from app.parsers.dxi_cli_parser import parse_dxi_cli_outputs
 
 
-class DXiCliSnmpCollector(BaseCollector):
+class DXiCliCollector(BaseCollector):
     async def _collect_payload(self) -> dict[str, Any]:
-        snmp_payload = await asyncio.to_thread(SnmpClient(self.config).collect_values)
         cli_result = await asyncio.to_thread(DxiCliClient(self.config).run_commands)
         cli_summary = parse_dxi_cli_outputs(cli_result.outputs, fallback_name=self.name)
         self._publish_metrics(cli_summary)
@@ -34,11 +32,7 @@ class DXiCliSnmpCollector(BaseCollector):
             "summary": cli_summary,
             "collection_status": "partial" if cli_result.errors else "success",
             "command_errors": cli_result.errors,
-            "snmp": snmp_payload,
-            "raw": {
-                "snmp": snmp_payload,
-                "cli": cli_result.outputs,
-            },
+            "raw": {"cli": cli_result.outputs},
         }
 
     def _publish_metrics(self, summary: dict[str, Any]) -> None:
@@ -77,6 +71,4 @@ class DXiCliSnmpCollector(BaseCollector):
             DXI_VTL_DEDUP_ENABLED.labels(device_name, vtl["name"]).set(1 if vtl["dedup_enabled"] else 0)
 
 
-DxiCliSnmpCollector = DXiCliSnmpCollector
-
-__all__ = ["DXiCliSnmpCollector", "DxiCliSnmpCollector", "parse_dxi_cli_outputs"]
+__all__ = ["DXiCliCollector", "parse_dxi_cli_outputs"]

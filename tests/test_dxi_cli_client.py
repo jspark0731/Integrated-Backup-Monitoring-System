@@ -13,7 +13,7 @@ def _config(**overrides: object) -> CollectorConfig:
     values: dict[str, object] = {
         "name": "DXi_1",
         "type": "DXi",
-        "protocol": "cli_snmp",
+        "protocol": "cli",
         "enabled": True,
         "host": "vtl.example",
         "ssh_port": 22,
@@ -52,7 +52,7 @@ def test_jump_config_loads_from_yaml(tmp_path: Path) -> None:
 collectors:
   - name: DXi_1
     type: DXi
-    protocol: cli_snmp
+    protocol: cli
     host: vtl.example
     username: root
     ssh_key_path: /app/secrets/ssh/id_ed25519

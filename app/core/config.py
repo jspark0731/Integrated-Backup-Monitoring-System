@@ -11,7 +11,7 @@ TO_BE_FILLED = "TO_BE_FILLED"
 LOGGER = logging.getLogger(__name__)
 
 
-Protocol = Literal["snmp", "rest", "ssh", "cli", "cli_snmp"]
+Protocol = Literal["snmp", "rest", "ssh", "cli"]
 CollectionClass = Literal["fast", "slow"]
 
 
@@ -136,8 +136,6 @@ class CollectorConfig:
             return self._rest_skip_reason()
         if self.protocol in {"ssh", "cli"}:
             return self._ssh_skip_reason()
-        if self.protocol == "cli_snmp":
-            return self._cli_snmp_skip_reason()
         return f"unsupported protocol: {self.protocol}"
 
     def _snmp_skip_reason(self) -> str | None:
@@ -212,16 +210,6 @@ class CollectorConfig:
             if not self.jump_ssh_key_path and not self.ssh_key_path:
                 return "SSH jump config requires jump_ssh_key_path or ssh_key_path"
         return None
-
-    def _cli_snmp_skip_reason(self) -> str | None:
-        snmp_skip_reason = self._snmp_skip_reason()
-        if snmp_skip_reason:
-            return snmp_skip_reason
-        ssh_skip_reason = self._ssh_skip_reason()
-        if ssh_skip_reason:
-            return ssh_skip_reason
-        return None
-
 
 @dataclass(frozen=True)
 class AppConfig:

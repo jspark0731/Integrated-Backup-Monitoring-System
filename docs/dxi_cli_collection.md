@@ -1,17 +1,13 @@
 # DXi CLI Collection
 
-DXi 2.2.1 SNMP documentation exposes device identity and state OIDs, but it does
-not provide the full set of dashboard targets from section 7.1 of
-`Codex_Implementation_Guide.md`, such as capacity, deduplication ratio,
-replication status, interface status, and alert counts.
-
-For those operational values, this project uses the combined DXi CLI + SNMP collector.
+DXi collection uses SSH CLI exclusively. The CLI provides the operational
+values needed by the dashboard, including capacity, data reduction, VTL and
+interface status, hardware status, alerts, and service tickets.
 
 ## Collection Flow
 
 ```text
 collector schedule
-  -> SNMP get/walk for identity and basic state
   -> SSH login to DXi and run configured CLI commands
   -> capture stdout
   -> parse text into a normalized summary
@@ -21,39 +17,33 @@ collector schedule
 
 ## Configuration
 
-Use `protocol: cli_snmp` for DXi collection.
+Use `protocol: cli` for DXi collection.
 
 ```yaml
 - name: DXi_1
   type: DXi
-  protocol: cli_snmp
+  protocol: cli
   enabled: true
   schedule:
     interval_minutes: 5
     minute_offset: 0
     second: 0
   host: DXi_1_host_TO_BE_FILLED
-  snmp_port: 161
   ssh_port: 22
-  community: DXi_1_community_TO_BE_FILLED
-  version: "2c"
   username: DXi_1_username_TO_BE_FILLED
   password: DXi_1_password_TO_BE_FILLED
   command_timeout: 30
-  oids:
-    state: 1.3.6.1.4.1.2036.2.1.1.7.0
-    serial_number: 1.3.6.1.4.1.2036.2.1.1.12.0
-        commands:
-          common_components: "syscli --getstatus commoncomponent"
-          storage_arrays: "syscli --getstatus storagearray"
-          system_board: "syscli --getstatus systemboard"
-          capacity: "syscli --get diskusage"
-          dedup: "syscli --get datareductionstat"
-          vtls: "syscli --list vtl"
-          interfaces: "syscli --getstatus networkport"
-          network_config: "syscli --show netcfg"
-          admin_alerts: "syscli --list adminalert"
-          service_tickets: "syscli --list serviceticket --open"
+  commands:
+    common_components: "syscli --getstatus commoncomponent"
+    storage_arrays: "syscli --getstatus storagearray"
+    system_board: "syscli --getstatus systemboard"
+    capacity: "syscli --get diskusage"
+    dedup: "syscli --get datareductionstat"
+    vtls: "syscli --list vtl"
+    interfaces: "syscli --getstatus networkport"
+    network_config: "syscli --show netcfg"
+    admin_alerts: "syscli --list adminalert"
+    service_tickets: "syscli --list serviceticket --open"
 ```
 
 If key-based authentication is preferred, set `ssh_key_path` instead of
@@ -72,7 +62,7 @@ an empty successful result; other individual command failures are retained in
 
 ## Parsed Payload
 
-The collector stores normalized and raw CLI/SNMP output together in
+The collector stores normalized and raw CLI output together in
 `VTL-RAW-YYYY-MM`. The latest summary overwrites `{collector}:current` in
 `VTL-CURRENT`.
 
@@ -103,15 +93,13 @@ The collector stores normalized and raw CLI/SNMP output together in
       "warning": 1
     }
   },
-  "raw": {
-    "capacity": "... original CLI output ..."
-  }
+  "raw": {"cli": {"capacity": "... original CLI output ..."}}
 }
 ```
 
 ## Prometheus Metrics
 
-The DXi CLI + SNMP collector publishes these normalized gauges when values can be
+The DXi CLI collector publishes these normalized gauges when values can be
 parsed:
 
 ```text

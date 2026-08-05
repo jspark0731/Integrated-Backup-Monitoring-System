@@ -7,7 +7,7 @@ DXi, DD, i6000, NetWorker, ZFS용 이미지를 만들고 Prometheus용 실시간
 ## Architecture
 
 ```text
-DXi ── SNMP + SSH CLI ─┐
+DXi ── SSH CLI ────────┐
 DD ─── SNMP ───────────┤
 i6000 ─ REST ──────────┤
 NetWorker ─ REST ──────┼─> CollectorScheduler ─┬─> Prometheus /metrics
@@ -155,7 +155,7 @@ Deployment와 security-domain 분류를 포함합니다.
 
 ## Collector Documentation
 
-- [DXi CLI + SNMP](docs/dxi_cli_collection.md)
+- [DXi CLI](docs/dxi_cli_collection.md)
 - [DD SNMP](docs/dd_snmp_collection.md)
 - [i6000 REST](docs/i6000_rest_collection.md)
 - [Collection data schema](docs/collection_data_schema.md)

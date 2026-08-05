@@ -11,7 +11,7 @@ def test_result_writes_raw_and_current_documents() -> None:
     result = CollectionResult(
         collector="DXi_1",
         target_type="DXi",
-        protocol="cli_snmp",
+        protocol="cli",
         collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
         ok=True,
         payload={"summary": {"device_name": "DXi_1"}},
@@ -56,7 +56,7 @@ def test_index_names_follow_target_specific_design() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     collected_at = datetime(2026, 6, 29, tzinfo=timezone.utc)
     cases = [
-        ("DXi_2", "DXi", "cli_snmp", "VTL-RAW-2026-06", "VTL-CURRENT"),
+        ("DXi_2", "DXi", "cli", "VTL-RAW-2026-06", "VTL-CURRENT"),
         ("DD6900_1", "DD", "snmp", "VTL-RAW-2026-06", "VTL-CURRENT"),
         ("DD6900_2", "DD", "snmp", "VTL-RAW-2026-06", "VTL-CURRENT"),
         ("i6000_core_rest", "i6000", "rest", "PTL-RAW-2026-06", "PTL-CURRENT"),

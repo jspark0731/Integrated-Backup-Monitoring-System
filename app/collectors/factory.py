@@ -7,8 +7,8 @@ from app.core.config import CollectorConfig
 def build_collector(config: CollectorConfig) -> BaseCollector:
     if config.type == "i6000" and config.protocol == "snmp":
         raise ValueError("i6000 SNMP collection is not supported; use protocol=rest")
-    if config.type == "DXi" and config.protocol in {"snmp", "ssh", "cli"}:
-        raise ValueError("DXi standalone SNMP/CLI collection is not supported; use protocol=cli_snmp")
+    if config.type == "DXi" and config.protocol in {"snmp", "ssh"}:
+        raise ValueError("DXi SNMP/legacy collection is not supported; use protocol=cli")
     if config.protocol == "snmp" and config.type == "DD":
         from app.collectors.dd_snmp_collector import DDSnmpCollector
 
@@ -25,8 +25,8 @@ def build_collector(config: CollectorConfig) -> BaseCollector:
         from app.collectors.zfs_rest_collector import ZfsRestCollector
 
         return ZfsRestCollector(config)
-    if config.protocol == "cli_snmp" and config.type == "DXi":
-        from app.collectors.dxi_cli_snmp_collector import DXiCliSnmpCollector
+    if config.protocol == "cli" and config.type == "DXi":
+        from app.collectors.dxi_cli_collector import DXiCliCollector
 
-        return DXiCliSnmpCollector(config)
+        return DXiCliCollector(config)
     raise ValueError(f"Unsupported collector protocol: {config.protocol}")

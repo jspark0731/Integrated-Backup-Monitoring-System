@@ -5,7 +5,7 @@ configuration.
 
 ## DXi-Series
 
-The DXi 2.2.1 SNMP reference documents the Quantum MIB under
+The historical DXi 2.2.1 SNMP reference documents the Quantum MIB under
 `1.3.6.1.4.1.2036.2.1`. The guide exposes system identity and state OIDs, not
 capacity totals.
 

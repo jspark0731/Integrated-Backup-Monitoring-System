@@ -119,7 +119,7 @@ NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 
 | `device_name` | `string` | payload summary의 장비명, 없으면 collector 이름 |
 | `solution` | `string` | `vtl`, `ptl`, `networker`, `zfs` |
 | `collection_class` | `string` | `fast` 또는 `slow` |
-| `protocol` | `string` | `snmp`, `cli_snmp`, `rest` 등 |
+| `protocol` | `string` | `snmp`, `cli`, `rest` 등 |
 | `ok` | `boolean` | 수집 성공 여부 |
 | `payload` | `object` | 대상별 정규화 데이터와 원본 데이터 |
 | `error` | `string nullable` | 실패 메시지 |
@@ -138,7 +138,7 @@ NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 
   "target_type": "DXi",
   "solution": "vtl",
   "collection_class": "fast",
-  "protocol": "cli_snmp",
+  "protocol": "cli",
   "ok": true,
   "payload": {
     "summary": {},
@@ -210,7 +210,7 @@ collector별 최신 운영 상태를 제공한다. fast 수집만 current를 갱
 ## 4. 대상별 Elasticsearch Payload
 
 아래 모델은 `raw.payload`의 정규화 영역이다. `raw.payload.raw` 및
-DD/DXi의 `raw.payload.snmp`는 원천 응답을 그대로 담으므로 별도 고정 스키마를
+DD의 `raw.payload.snmp`는 원천 응답을 그대로 담으므로 별도 고정 스키마를
 적용하지 않는다.
 
 ### 4.1 DD
