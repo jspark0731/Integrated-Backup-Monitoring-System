@@ -13,10 +13,10 @@ data:
     elasticsearch:
       enabled: false
       hosts: [https://elasticsearch:9200]
-      username_file: /app/secrets/elasticsearch/username
-      password_file: /app/secrets/elasticsearch/password
+      username_file: /apps/secrets/elasticsearch/username
+      password_file: /apps/secrets/elasticsearch/password
       verify_certs: true
-      ca_certs: /app/secrets/elasticsearch/ca.crt
+      ca_certs: /apps/secrets/elasticsearch/ca.crt
     collectors:
       - name: networker_core
         type: Networker
@@ -26,14 +26,14 @@ data:
           fast: {interval_minutes: 5, minute_offset: 3, second: 0}
           slow: {interval_minutes: 60, minute_offset: 3, second: 30}
         base_url: networker_core_base_url_TO_BE_FILLED
-        token_file: /app/secrets/networker/core/token
-        username_file: /app/secrets/networker/core/username
-        password_file: /app/secrets/networker/core/password
+        token_file: /apps/secrets/networker/core/token
+        username_file: /apps/secrets/networker/core/username
+        password_file: /apps/secrets/networker/core/password
         verify_tls: true
         rest: {max_concurrency: 4}
         source_networker: core
         classification: &networker_classification
-          hostname_csv_path: /app/config/hostname_domain.csv
+          hostname_csv_path: /apps/config/hostname_domain.csv
           allowed_domains: [core, chnl, info, ifrs]
           unmapped_domain: unmapped
       - name: networker_chnl
@@ -44,9 +44,9 @@ data:
           fast: {interval_minutes: 5, minute_offset: 3, second: 0}
           slow: {interval_minutes: 60, minute_offset: 3, second: 30}
         base_url: networker_chnl_base_url_TO_BE_FILLED
-        token_file: /app/secrets/networker/chnl/token
-        username_file: /app/secrets/networker/chnl/username
-        password_file: /app/secrets/networker/chnl/password
+        token_file: /apps/secrets/networker/chnl/token
+        username_file: /apps/secrets/networker/chnl/username
+        password_file: /apps/secrets/networker/chnl/password
         verify_tls: true
         rest: {max_concurrency: 4}
         source_networker: chnl
@@ -59,9 +59,9 @@ data:
           fast: {interval_minutes: 5, minute_offset: 3, second: 0}
           slow: {interval_minutes: 60, minute_offset: 3, second: 30}
         base_url: networker_info_base_url_TO_BE_FILLED
-        token_file: /app/secrets/networker/info/token
-        username_file: /app/secrets/networker/info/username
-        password_file: /app/secrets/networker/info/password
+        token_file: /apps/secrets/networker/info/token
+        username_file: /apps/secrets/networker/info/username
+        password_file: /apps/secrets/networker/info/password
         verify_tls: true
         rest: {max_concurrency: 4}
         source_networker: info
@@ -74,9 +74,9 @@ data:
           fast: {interval_minutes: 5, minute_offset: 3, second: 0}
           slow: {interval_minutes: 60, minute_offset: 3, second: 30}
         base_url: networker_ifrs_base_url_TO_BE_FILLED
-        token_file: /app/secrets/networker/ifrs/token
-        username_file: /app/secrets/networker/ifrs/username
-        password_file: /app/secrets/networker/ifrs/password
+        token_file: /apps/secrets/networker/ifrs/token
+        username_file: /apps/secrets/networker/ifrs/username
+        password_file: /apps/secrets/networker/ifrs/password
         verify_tls: true
         rest: {max_concurrency: 4}
         source_networker: ifrs
@@ -115,18 +115,18 @@ spec:
               containerPort: 8080
           env:
             - name: APP_CONFIG
-              value: /app/config/collector.yaml
+              value: /apps/config/collector.yaml
           volumeMounts:
             - name: config
-              mountPath: /app/config/collector.yaml
+              mountPath: /apps/config/collector.yaml
               subPath: collector.yaml
               readOnly: true
             - name: config
-              mountPath: /app/config/hostname_domain.csv
+              mountPath: /apps/config/hostname_domain.csv
               subPath: hostname_domain.csv
               readOnly: true
             - name: secrets
-              mountPath: /app/secrets
+              mountPath: /apps/secrets
               readOnly: true
           readinessProbe:
             httpGet: {path: /readyz, port: http}

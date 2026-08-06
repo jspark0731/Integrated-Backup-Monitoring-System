@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.clients.i6000_rest_client import I6000RestClient
-from app.clients.rest_client import endpoint_errors
-from app.collectors.base import BaseCollector
-from app.core.config import CollectionClass
-from app.core.metrics import (
+from apps.clients.i6000_rest_client import I6000RestClient
+from apps.clients.rest_client import endpoint_errors
+from apps.collectors.base import BaseCollector
+from apps.core.config import CollectionClass
+from apps.core.metrics import (
     DEVICE_UP,
     TAPE_DRIVE_ERROR_COUNT,
     TAPE_DRIVE_STATUS,
@@ -16,7 +16,7 @@ from app.core.metrics import (
     TAPE_SLOT_FREE_COUNT,
     TAPE_SLOT_USED_COUNT,
 )
-from app.parsers.i6000_rest_parser import parse_i6000_rest_payload
+from apps.parsers.i6000_rest_parser import parse_i6000_rest_payload
 
 
 class I6000RestCollector(BaseCollector):

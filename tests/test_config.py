@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.core.config import (
+from apps.core.config import (
     CollectionSchedulesConfig,
     default_minute_offset,
     default_second,
@@ -83,7 +83,7 @@ collectors:
     password: secret
     source_networker: core
     classification:
-      hostname_csv_path: /app/config/hostname_domain.csv
+      hostname_csv_path: /apps/config/hostname_domain.csv
 """,
         encoding="utf-8",
     )
@@ -94,7 +94,7 @@ collectors:
     assert config.collectors[0].effective_schedule.interval_minutes == 1
     assert config.collectors[0].effective_schedule.second == 30
     assert config.collectors[0].source_networker == "core"
-    assert config.collectors[0].hostname_csv_path == "/app/config/hostname_domain.csv"
+    assert config.collectors[0].hostname_csv_path == "/apps/config/hostname_domain.csv"
 
 
 def test_fast_and_slow_schedules_load_with_defaults(tmp_path: Path) -> None:
@@ -242,7 +242,7 @@ elasticsearch:
   enabled: true
   username_file: {es_username}
   password_file: {es_password}
-  ca_certs: /app/secrets/elasticsearch/ca.crt
+  ca_certs: /apps/secrets/elasticsearch/ca.crt
 collectors:
   - name: DXi_1
     type: DXi
@@ -261,7 +261,7 @@ collectors:
 
     assert config.elasticsearch.username == "elastic"
     assert config.elasticsearch.password == "elastic-password"
-    assert config.elasticsearch.ca_certs == "/app/secrets/elasticsearch/ca.crt"
+    assert config.elasticsearch.ca_certs == "/apps/secrets/elasticsearch/ca.crt"
     assert config.collectors[0].username == "dxi-user"
     assert config.collectors[0].password == "dxi-password"
     assert config.collectors[0].skip_reason is None

@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
 
-from app.core.config import ElasticsearchConfig
-from app.models import CollectionResult
-from app.processors.derived import build_derived_documents
-from app.writers.elasticsearch import ElasticsearchWriter
+from apps.core.config import ElasticsearchConfig
+from apps.models import CollectionResult
+from apps.processors.derived import build_derived_documents
+from apps.writers.elasticsearch import ElasticsearchWriter
 
 
 def test_result_writes_raw_and_current_documents() -> None:

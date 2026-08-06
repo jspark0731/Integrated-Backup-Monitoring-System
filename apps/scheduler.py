@@ -4,11 +4,11 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import logging
 
-from app.collectors.base import BaseCollector
-from app.core.config import CollectionClass, ScheduleConfig
-from app.core.metrics import SCHEDULER_LOOP_ERROR_TOTAL
-from app.models import CollectionResult
-from app.writers.elasticsearch import ElasticsearchWriter
+from apps.collectors.base import BaseCollector
+from apps.core.config import CollectionClass, ScheduleConfig
+from apps.core.metrics import SCHEDULER_LOOP_ERROR_TOTAL
+from apps.models import CollectionResult
+from apps.writers.elasticsearch import ElasticsearchWriter
 
 LOGGER = logging.getLogger(__name__)
 

@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.core.config import ElasticsearchConfig
-from app.core.metrics import ELASTICSEARCH_WRITE_TOTAL
-from app.models import CollectionResult
-from app.processors.derived import build_derived_documents
+from apps.core.config import ElasticsearchConfig
+from apps.core.metrics import ELASTICSEARCH_WRITE_TOTAL
+from apps.models import CollectionResult
+from apps.processors.derived import build_derived_documents
 
 LOGGER = logging.getLogger(__name__)
 

@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.clients.snmp_client import SnmpClient
-from app.collectors.base import BaseCollector
-from app.core.metrics import (
+from apps.clients.snmp_client import SnmpClient
+from apps.collectors.base import BaseCollector
+from apps.core.metrics import (
     DD_DDBOOST_CONNECTIONS,
     DD_DDBOOST_STORAGE_UNIT_BYTES,
     DD_DDBOOST_STORAGE_UNIT_COMPRESSION,
@@ -19,7 +19,7 @@ from app.core.metrics import (
     DEVICE_REPLICATION_UP,
     DEVICE_UP,
 )
-from app.parsers.dd_snmp_parser import parse_dd_snmp_payload
+from apps.parsers.dd_snmp_parser import parse_dd_snmp_payload
 
 
 class DDSnmpCollector(BaseCollector):

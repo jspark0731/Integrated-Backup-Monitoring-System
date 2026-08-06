@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.clients.dxi_cli_client import DxiCliClient
-from app.collectors.base import BaseCollector
-from app.core.metrics import (
+from apps.clients.dxi_cli_client import DxiCliClient
+from apps.collectors.base import BaseCollector
+from apps.core.metrics import (
     DEVICE_ALERT_COUNT,
     DEVICE_CAPACITY_AVAILABLE_BYTES,
     DEVICE_CAPACITY_TOTAL_BYTES,
@@ -19,7 +19,7 @@ from app.core.metrics import (
     DXI_VTL_DEDUP_ENABLED,
     DXI_VTL_ONLINE,
 )
-from app.parsers.dxi_cli_parser import parse_dxi_cli_outputs
+from apps.parsers.dxi_cli_parser import parse_dxi_cli_outputs
 
 
 class DXiCliCollector(BaseCollector):

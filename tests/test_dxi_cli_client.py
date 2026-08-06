@@ -5,8 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.clients.dxi_cli_client import DxiCliClient
-from app.core.config import CollectorConfig, load_config
+from apps.clients.dxi_cli_client import DxiCliClient
+from apps.core.config import CollectorConfig, load_config
 
 
 def _config(**overrides: object) -> CollectorConfig:
@@ -18,12 +18,12 @@ def _config(**overrides: object) -> CollectorConfig:
         "host": "vtl.example",
         "ssh_port": 22,
         "username": "root",
-        "ssh_key_path": "/app/secrets/ssh/id_ed25519",
-        "ssh_known_hosts_path": "/app/secrets/ssh/known_hosts",
+        "ssh_key_path": "/apps/secrets/ssh/id_rsa",
+        "ssh_known_hosts_path": "/apps/secrets/ssh/known_hosts",
         "jump_host": "relay.example",
         "jump_port": 22,
         "jump_username": "123456789",
-        "jump_ssh_key_path": "/app/secrets/ssh/id_ed25519",
+        "jump_ssh_key_path": "/apps/secrets/ssh/id_rsa",
         "commands": {"status": "show status"},
     }
     values.update(overrides)
@@ -55,12 +55,12 @@ collectors:
     protocol: cli
     host: vtl.example
     username: root
-    ssh_key_path: /app/secrets/ssh/id_ed25519
-    ssh_known_hosts_path: /app/secrets/ssh/known_hosts
+    ssh_key_path: /apps/secrets/ssh/id_rsa
+    ssh_known_hosts_path: /apps/secrets/ssh/known_hosts
     jump_host: relay.example
     jump_port: 2222
     jump_username: "123456789"
-    jump_ssh_key_path: /app/secrets/ssh/id_ed25519
+    jump_ssh_key_path: /apps/secrets/ssh/id_rsa
     commands:
       status: show status
 """,
@@ -72,8 +72,8 @@ collectors:
     assert collector.jump_host == "relay.example"
     assert collector.jump_port == 2222
     assert collector.jump_username == "123456789"
-    assert collector.jump_ssh_key_path == "/app/secrets/ssh/id_ed25519"
-    assert collector.ssh_known_hosts_path == "/app/secrets/ssh/known_hosts"
+    assert collector.jump_ssh_key_path == "/apps/secrets/ssh/id_rsa"
+    assert collector.ssh_known_hosts_path == "/apps/secrets/ssh/known_hosts"
 
 
 def test_run_commands_uses_direct_tcpip_channel(monkeypatch) -> None:
@@ -113,7 +113,7 @@ def test_run_commands_uses_direct_tcpip_channel(monkeypatch) -> None:
         hostname="relay.example",
         port=22,
         username="123456789",
-        key_filename="/app/secrets/ssh/id_ed25519",
+        key_filename="/apps/secrets/ssh/id_rsa",
         timeout=30,
         banner_timeout=30,
         auth_timeout=30,

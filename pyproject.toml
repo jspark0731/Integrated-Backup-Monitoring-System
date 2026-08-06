@@ -43,10 +43,10 @@ dev = [
 ]
 
 [project.scripts]
-backup-collector-api = "app.main:run"
+backup-collector-api = "apps.main:run"
 
 [tool.setuptools]
-packages = ["app"]
+packages = ["apps"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

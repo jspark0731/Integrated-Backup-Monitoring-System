@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 import logging
 import time
 
-from app.core.config import CollectionClass, CollectorConfig
-from app.core.metrics import COLLECTION_DURATION, COLLECTION_TOTAL, COLLECTOR_LAST_SUCCESS_TIMESTAMP, COLLECTOR_SKIPPED
-from app.models import CollectionResult
+from apps.core.config import CollectionClass, CollectorConfig
+from apps.core.metrics import COLLECTION_DURATION, COLLECTION_TOTAL, COLLECTOR_LAST_SUCCESS_TIMESTAMP, COLLECTOR_SKIPPED
+from apps.models import CollectionResult
 
 LOGGER = logging.getLogger(__name__)
 

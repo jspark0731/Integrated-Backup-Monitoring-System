@@ -10,7 +10,7 @@ elasticsearch:
   username: elasticsearch_username_TO_BE_FILLED
   password: elasticsearch_password_TO_BE_FILLED
   verify_certs: true
-  ca_certs: /app/secrets/elasticsearch/ca.crt
+  ca_certs: /apps/secrets/elasticsearch/ca.crt
 
 collectors:
   - name: networker_core
@@ -36,7 +36,7 @@ collectors:
       max_concurrency: 4
     source_networker: core
     classification:
-      hostname_csv_path: /app/config/hostname_domain.csv
+      hostname_csv_path: /apps/config/hostname_domain.csv
       allowed_domains: [core, chnl, info, ifrs]
       unmapped_domain: unmapped
 
@@ -63,7 +63,7 @@ collectors:
       max_concurrency: 4
     source_networker: chnl
     classification:
-      hostname_csv_path: /app/config/hostname_domain.csv
+      hostname_csv_path: /apps/config/hostname_domain.csv
       allowed_domains: [core, chnl, info, ifrs]
       unmapped_domain: unmapped
 
@@ -90,7 +90,7 @@ collectors:
       max_concurrency: 4
     source_networker: info
     classification:
-      hostname_csv_path: /app/config/hostname_domain.csv
+      hostname_csv_path: /apps/config/hostname_domain.csv
       allowed_domains: [core, chnl, info, ifrs]
       unmapped_domain: unmapped
 
@@ -117,6 +117,6 @@ collectors:
       max_concurrency: 4
     source_networker: ifrs
     classification:
-      hostname_csv_path: /app/config/hostname_domain.csv
+      hostname_csv_path: /apps/config/hostname_domain.csv
       allowed_domains: [core, chnl, info, ifrs]
       unmapped_domain: unmapped

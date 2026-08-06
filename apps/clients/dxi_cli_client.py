@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.core.config import CollectorConfig
+from apps.core.config import CollectorConfig
 
 
 @dataclass(frozen=True)

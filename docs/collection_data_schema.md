@@ -1,7 +1,7 @@
 # 수집 데이터 스키마 및 모델
 
-> 기준 코드: `app/models.py`, `app/writers/elasticsearch.py`, `app/processors/derived.py`,
-> `app/parsers/*`, `app/collectors/*`, `app/core/metrics.py`  
+> 기준 코드: `apps/models.py`, `apps/writers/elasticsearch.py`, `apps/processors/derived.py`,
+> `apps/parsers/*`, `apps/collectors/*`, `apps/core/metrics.py`
 > 작성 기준일: 2026-07-28
 
 ## 1. 데이터 흐름

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.core.config import CollectorConfig
+from apps.core.config import CollectorConfig
 
 
 class SnmpClient:

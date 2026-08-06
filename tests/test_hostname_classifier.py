@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from app.classifiers.hostname import HostnameClassifier
-from app.parsers.networker_rest_parser import parse_networker_rest_payload
+from apps.classifiers.hostname import HostnameClassifier
+from apps.parsers.networker_rest_parser import parse_networker_rest_payload
 
 
 def test_classifier_matches_fqdn_short_name_and_unmapped(tmp_path: Path) -> None:

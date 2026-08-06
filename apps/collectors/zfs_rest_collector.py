@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.clients.zfs_rest_client import ZfsRestClient
-from app.clients.rest_client import endpoint_errors
-from app.collectors.base import BaseCollector
-from app.core.config import CollectionClass
-from app.core.metrics import (
+from apps.clients.zfs_rest_client import ZfsRestClient
+from apps.clients.rest_client import endpoint_errors
+from apps.collectors.base import BaseCollector
+from apps.core.config import CollectionClass
+from apps.core.metrics import (
     ZFS_ALERT_COUNT,
     ZFS_API_UP,
     ZFS_CAPACITY_USED_PERCENT,
     ZFS_POOL_STATUS,
 )
-from app.parsers.zfs_rest_parser import parse_zfs_rest_payload
+from apps.parsers.zfs_rest_parser import parse_zfs_rest_payload
 
 
 class ZfsRestCollector(BaseCollector):

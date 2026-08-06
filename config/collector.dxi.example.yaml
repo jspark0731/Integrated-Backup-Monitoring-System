@@ -10,7 +10,7 @@ elasticsearch:
   username: elasticsearch_username_TO_BE_FILLED
   password: elasticsearch_password_TO_BE_FILLED
   verify_certs: true
-  ca_certs: /app/secrets/elasticsearch/ca.crt
+  ca_certs: /apps/secrets/elasticsearch/ca.crt
 
 collectors:
   - name: DXi_1
@@ -23,12 +23,12 @@ collectors:
       second: 0
     host: DXi_1_host_TO_BE_FILLED
     ssh_port: 22
-    ssh_key_path: /app/secrets/ssh/id_ed25519
-    ssh_known_hosts_path: /app/secrets/ssh/known_hosts
+    ssh_key_path: /apps/secrets/ssh/id_rsa
+    ssh_known_hosts_path: /apps/secrets/ssh/known_hosts
     jump_host: relay_host_TO_BE_FILLED
     jump_port: 22
     jump_username: "123456789"
-    jump_ssh_key_path: /app/secrets/ssh/id_ed25519
+    jump_ssh_key_path: /apps/secrets/ssh/id_rsa
     username: root
     command_timeout: 30
     commands:
@@ -53,12 +53,12 @@ collectors:
       second: 0
     host: DXi_2_host_TO_BE_FILLED
     ssh_port: 22
-    ssh_key_path: /app/secrets/ssh/id_ed25519
-    ssh_known_hosts_path: /app/secrets/ssh/known_hosts
+    ssh_key_path: /apps/secrets/ssh/id_rsa
+    ssh_known_hosts_path: /apps/secrets/ssh/known_hosts
     jump_host: relay_host_TO_BE_FILLED
     jump_port: 22
     jump_username: "123456789"
-    jump_ssh_key_path: /app/secrets/ssh/id_ed25519
+    jump_ssh_key_path: /apps/secrets/ssh/id_rsa
     username: root
     command_timeout: 30
     commands:

@@ -385,9 +385,9 @@ Certificate는 Secret volume mount 방식으로 사용할 수 있도록 한다.
 예:
 
 ```text
-/app/secrets/elasticsearch/ca.crt
-/app/secrets/i6000/ca.crt
-/app/secrets/networker/ca.crt
+/apps/secrets/elasticsearch/ca.crt
+/apps/secrets/i6000/ca.crt
+/apps/secrets/networker/ca.crt
 ```
 
 기존 환경변수 또는 YAML config 방식과 자연스럽게 연결되도록 구현한다.

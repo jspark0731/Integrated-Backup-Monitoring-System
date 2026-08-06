@@ -2,13 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from app.collectors.factory import build_collector
-from app.collectors.dd_snmp_collector import DDSnmpCollector, parse_dd_snmp_payload
-from app.collectors.dxi_cli_collector import DXiCliCollector, parse_dxi_cli_outputs
-from app.collectors.i6000_rest_collector import I6000RestCollector, parse_i6000_rest_payload
-from app.collectors.networker_rest_collector import NetworkerRestCollector, parse_networker_rest_payload
-from app.collectors.zfs_rest_collector import ZfsRestCollector, parse_zfs_rest_payload
-from app.core.config import CollectorConfig
+from apps.collectors.factory import build_collector
+from apps.collectors.dd_snmp_collector import DDSnmpCollector, parse_dd_snmp_payload
+from apps.collectors.dxi_cli_collector import DXiCliCollector, parse_dxi_cli_outputs
+from apps.collectors.i6000_rest_collector import I6000RestCollector, parse_i6000_rest_payload
+from apps.collectors.networker_rest_collector import NetworkerRestCollector, parse_networker_rest_payload
+from apps.collectors.zfs_rest_collector import ZfsRestCollector, parse_zfs_rest_payload
+from apps.core.config import CollectorConfig
 
 
 @pytest.mark.asyncio

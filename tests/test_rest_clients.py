@@ -3,9 +3,9 @@ import asyncio
 import httpx
 import pytest
 
-from app.clients.i6000_rest_client import I6000RestClient
-from app.clients.rest_client import ERRORS_KEY, ReusableRestClient
-from app.core.config import CollectorConfig
+from apps.clients.i6000_rest_client import I6000RestClient
+from apps.clients.rest_client import ERRORS_KEY, ReusableRestClient
+from apps.core.config import CollectorConfig
 
 
 def i6000_config(max_concurrency: int = 4) -> CollectorConfig:

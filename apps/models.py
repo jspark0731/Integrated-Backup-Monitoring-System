@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from app.core.config import CollectionClass
+from apps.core.config import CollectionClass
 
 
 @dataclass(frozen=True)

@@ -3,14 +3,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.collectors.base import BaseCollector
-from app.core.config import (
+from apps.collectors.base import BaseCollector
+from apps.core.config import (
     CollectionSchedulesConfig,
     CollectorConfig,
     ScheduleConfig,
 )
-from app.models import CollectionResult
-from app.scheduler import CollectorScheduler, seconds_until_next_run
+from apps.models import CollectionResult
+from apps.scheduler import CollectorScheduler, seconds_until_next_run
 
 
 def test_seconds_until_next_run_dxi_offset_zero() -> None:
@@ -157,7 +157,7 @@ def scheduler_test_config(name: str = "DD4500") -> CollectorConfig:
 
 @pytest.mark.asyncio
 async def test_collector_loop_runs_again_after_unexpected_exception(monkeypatch) -> None:
-    monkeypatch.setattr("app.scheduler.seconds_until_next_run", lambda *args: 0)
+    monkeypatch.setattr("apps.scheduler.seconds_until_next_run", lambda *args: 0)
     recovered = asyncio.Event()
     collector = UnexpectedlyFailingCollector(scheduler_test_config(), recovered)
     writer = RecordingWriter()
@@ -174,7 +174,7 @@ async def test_collector_loop_runs_again_after_unexpected_exception(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_collector_loop_runs_again_after_writer_exception(monkeypatch) -> None:
-    monkeypatch.setattr("app.scheduler.seconds_until_next_run", lambda *args: 0)
+    monkeypatch.setattr("apps.scheduler.seconds_until_next_run", lambda *args: 0)
     collector = RecordingCollector(scheduler_test_config())
     writer = FailingWriter()
     scheduler = CollectorScheduler([collector], writer)
@@ -191,7 +191,7 @@ async def test_collector_loop_runs_again_after_writer_exception(monkeypatch) -> 
 
 @pytest.mark.asyncio
 async def test_one_collector_failure_does_not_stop_another(monkeypatch) -> None:
-    monkeypatch.setattr("app.scheduler.seconds_until_next_run", lambda *args: 0)
+    monkeypatch.setattr("apps.scheduler.seconds_until_next_run", lambda *args: 0)
     failing_recovered = asyncio.Event()
     healthy_collected = asyncio.Event()
     failing = UnexpectedlyFailingCollector(

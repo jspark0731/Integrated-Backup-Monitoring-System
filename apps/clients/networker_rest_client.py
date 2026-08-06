@@ -5,8 +5,8 @@ from urllib.parse import urljoin
 
 import httpx
 
-from app.clients.rest_client import ReusableRestClient
-from app.core.config import CollectionClass, CollectorConfig
+from apps.clients.rest_client import ReusableRestClient
+from apps.core.config import CollectionClass, CollectorConfig
 
 
 DEFAULT_ENDPOINTS = {

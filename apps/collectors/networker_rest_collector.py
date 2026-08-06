@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.classifiers.hostname import HostnameClassifier
-from app.clients.networker_rest_client import NetworkerRestClient
-from app.clients.rest_client import endpoint_errors
-from app.collectors.base import BaseCollector
-from app.core.config import CollectionClass
-from app.core.metrics import (
+from apps.classifiers.hostname import HostnameClassifier
+from apps.clients.networker_rest_client import NetworkerRestClient
+from apps.clients.rest_client import endpoint_errors
+from apps.collectors.base import BaseCollector
+from apps.core.config import CollectionClass
+from apps.core.metrics import (
     NETWORKER_API_UP,
     NETWORKER_CLIENT_COUNT,
     NETWORKER_JOB_FAILED_COUNT,
@@ -16,7 +16,7 @@ from app.core.metrics import (
     NETWORKER_JOB_SUCCESS_COUNT,
     NETWORKER_WORKFLOW_COUNT,
 )
-from app.parsers.networker_rest_parser import parse_networker_rest_payload
+from apps.parsers.networker_rest_parser import parse_networker_rest_payload
 
 
 class NetworkerRestCollector(BaseCollector):

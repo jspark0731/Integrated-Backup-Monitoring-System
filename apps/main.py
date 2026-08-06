@@ -7,12 +7,12 @@ import os
 import uvicorn
 from fastapi import FastAPI
 
-from app.api.routes import router
-from app.collectors.factory import build_collector
-from app.core.config import load_config
-from app.core.logging import configure_logging
-from app.scheduler import CollectorScheduler
-from app.writers.elasticsearch import ElasticsearchWriter
+from apps.api.routes import router
+from apps.collectors.factory import build_collector
+from apps.core.config import load_config
+from apps.core.logging import configure_logging
+from apps.scheduler import CollectorScheduler
+from apps.writers.elasticsearch import ElasticsearchWriter
 
 
 CONFIG_PATH = Path(os.getenv("APP_CONFIG", "config/collector.example.yaml"))
@@ -41,7 +41,7 @@ app.include_router(router)
 
 
 def run() -> None:
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8080)
+    uvicorn.run("apps.main:app", host="0.0.0.0", port=8080)
 
 
 if __name__ == "__main__":

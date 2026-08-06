@@ -396,8 +396,8 @@ Codex는 collector 파일명을 다음 원칙으로 정리한다.
 예시 compatibility wrapper:
 
 ```python id="5sumo3"
-# app/collectors/i6000_rest.py
-from app.collectors.i6000_rest_collector import I6000RestCollector
+# apps/collectors/i6000_rest.py
+from apps.collectors.i6000_rest_collector import I6000RestCollector
 
 __all__ = ["I6000RestCollector"]
 ```
@@ -405,7 +405,7 @@ __all__ = ["I6000RestCollector"]
 리팩터링 후 권장 구조:
 
 ```text id="64bsfb"
-app/
+apps/
 ├── collectors/
 │   ├── __init__.py
 │   ├── base.py
@@ -577,19 +577,19 @@ REST 수집 성공 여부
 i6000 Collector 파일명은 다음을 사용한다.
 
 ```text id="l0jv9u"
-app/collectors/i6000_rest_collector.py
+apps/collectors/i6000_rest_collector.py
 ```
 
 i6000 REST client 파일명은 다음을 사용한다.
 
 ```text id="55wjxy"
-app/clients/i6000_rest_client.py
+apps/clients/i6000_rest_client.py
 ```
 
 i6000 parser 파일명은 다음을 사용한다.
 
 ```text id="c6g3t7"
-app/parsers/i6000_rest_parser.py
+apps/parsers/i6000_rest_parser.py
 ```
 
 i6000 config 파일은 다음을 사용한다.
@@ -661,7 +661,7 @@ DXi는 SNMP와 SSH CLI를 함께 사용한다.
 DXi Collector 파일명은 다음을 사용한다.
 
 ```text id="rnzfca"
-app/collectors/dxi_cli_snmp_collector.py
+apps/collectors/dxi_cli_snmp_collector.py
 ```
 
 DXi는 다음 기준을 따른다.
@@ -742,7 +742,7 @@ DD는 SNMP Collector를 사용한다.
 DD Collector 파일명은 다음을 사용한다.
 
 ```text id="1nzcna"
-app/collectors/dd_snmp_collector.py
+apps/collectors/dd_snmp_collector.py
 ```
 
 DD config 예시:
@@ -790,13 +790,13 @@ NetWorker는 REST API Collector를 사용한다.
 NetWorker Collector 파일명은 다음을 사용한다.
 
 ```text id="47uf0a"
-app/collectors/networker_rest_collector.py
+apps/collectors/networker_rest_collector.py
 ```
 
 NetWorker REST client 파일명은 다음을 사용한다.
 
 ```text id="iil1zq"
-app/clients/networker_rest_client.py
+apps/clients/networker_rest_client.py
 ```
 
 NetWorker config 예시:
@@ -859,13 +859,13 @@ ZFS는 REST API Collector를 사용한다.
 ZFS Collector 파일명은 다음을 사용한다.
 
 ```text id="q72qqy"
-app/collectors/zfs_rest_collector.py
+apps/collectors/zfs_rest_collector.py
 ```
 
 ZFS REST client 파일명은 다음을 사용한다.
 
 ```text id="u0jlyo"
-app/clients/zfs_rest_client.py
+apps/clients/zfs_rest_client.py
 ```
 
 ZFS config 예시:
@@ -910,7 +910,7 @@ REST API 수집 성공 여부
 
 ## 17. Collector Factory 요구사항
 
-`app/collectors/factory.py`는 config의 `type`과 `protocol`을 기준으로 적절한 collector class를 생성한다.
+`apps/collectors/factory.py`는 config의 `type`과 `protocol`을 기준으로 적절한 collector class를 생성한다.
 
 예시 매핑:
 
@@ -1530,8 +1530,8 @@ def test_next_run_i6000_offset_two_minutes():
 ```text id="6gwwzd"
 현재 local repository 구조 분석
 Codex_Implementation_Guide.md 분석
-app/collectors 구조 분석
-app/scheduler.py 구조 분석
+apps/collectors 구조 분석
+apps/scheduler.py 구조 분석
 config/*.yaml 구조 분석
 k8s/*.yaml 구조 분석
 Dockerfile target 분석
@@ -1661,11 +1661,11 @@ Codex_Implementation_Guide.md와 코드 구조를 이 가이드에 맞게 수정
    dxi가 CLI와 SNMP를 함께 쓰면 dxi_cli_snmp_collector.py처럼 대상과 프로토콜이 드러나는 파일명을 사용해주세요.
 
    권장 파일명:
-   app/collectors/dxi_cli_snmp_collector.py
-   app/collectors/dd_snmp_collector.py
-   app/collectors/i6000_rest_collector.py
-   app/collectors/networker_rest_collector.py
-   app/collectors/zfs_rest_collector.py
+   apps/collectors/dxi_cli_snmp_collector.py
+   apps/collectors/dd_snmp_collector.py
+   apps/collectors/i6000_rest_collector.py
+   apps/collectors/networker_rest_collector.py
+   apps/collectors/zfs_rest_collector.py
 
 4. factory.py는 변경된 type/protocol 조합에 맞게 collector를 생성해야 합니다.
    i6000/snmp 조합은 지원하지 않는 것으로 처리해주세요.

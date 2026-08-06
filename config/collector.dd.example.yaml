@@ -10,7 +10,7 @@ elasticsearch:
   username: elasticsearch_username_TO_BE_FILLED
   password: elasticsearch_password_TO_BE_FILLED
   verify_certs: true
-  ca_certs: /app/secrets/elasticsearch/ca.crt
+  ca_certs: /apps/secrets/elasticsearch/ca.crt
 
 collectors:
   - name: DD4500

@@ -108,7 +108,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 cp config/collector.example.yaml config/collector.yaml
-APP_CONFIG=config/collector.yaml uvicorn app.main:app --host 0.0.0.0 --port 8080
+APP_CONFIG=config/collector.yaml uvicorn apps.main:app --host 0.0.0.0 --port 8080
 ```
 
 Windows PowerShell에서는 활성화 명령을

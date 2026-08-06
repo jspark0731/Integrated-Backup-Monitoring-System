@@ -7,9 +7,9 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
-from app.core.config import CollectorConfig
-from app.core.config import CollectionClass
-from app.clients.rest_client import ReusableRestClient
+from apps.core.config import CollectorConfig
+from apps.core.config import CollectionClass
+from apps.clients.rest_client import ReusableRestClient
 
 
 DEFAULT_ENDPOINTS = {

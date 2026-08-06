@@ -47,7 +47,7 @@ Secret에는 다음 값을 둔다.
 | ZFS | `backup-dashboard-collector-zfs-secrets` |
 
 공통 Elasticsearch certificate는 container에서
-`/app/secrets/elasticsearch/ca.crt`로 mount된다. 운영 CA를 사용하고
+`/apps/secrets/elasticsearch/ca.crt`로 mount된다. 운영 CA를 사용하고
 `verify_certs: true`를 유지한다. 장비 자체 CA를 추가해야 한다면 image trust
 store 또는 별도 certificate volume을 운영 overlay에서 구성한다.
 
