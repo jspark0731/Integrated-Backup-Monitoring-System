@@ -39,16 +39,16 @@ data:
         username: root
         command_timeout: 30
         commands:
-          common_components: "syscli --getstatus commoncomponent"
-          storage_arrays: "syscli --getstatus storagearray"
-          system_board: "syscli --getstatus systemboard"
-          capacity: "syscli --get diskusage"
-          dedup: "syscli --get datareductionstat"
-          vtls: "syscli --list vtl"
-          interfaces: "syscli --getstatus networkport"
-          network_config: "syscli --show netcfg"
-          admin_alerts: "syscli --list adminalert"
-          service_tickets: "syscli --list serviceticket --open"
+          common_components: "/hurricane/syscli --getstatus commoncomponent"
+          storage_arrays: "/hurricane/syscli --getstatus storagearray"
+          system_board: "/hurricane/syscli --getstatus systemboard"
+          capacity: "/hurricane/syscli --get diskusage"
+          dedup: "/hurricane/syscli --get datareductionstat"
+          vtls: "/hurricane/syscli --list vtl"
+          interfaces: "/hurricane/syscli --getstatus networkport"
+          network_config: "/hurricane/syscli --show netcfg"
+          admin_alerts: "/hurricane/syscli --list adminalert"
+          service_tickets: "/hurricane/syscli --list serviceticket --open"
       - name: DXi_2
         type: DXi
         protocol: cli
@@ -68,16 +68,16 @@ data:
         username: root
         command_timeout: 30
         commands:
-          common_components: "syscli --getstatus commoncomponent"
-          storage_arrays: "syscli --getstatus storagearray"
-          system_board: "syscli --getstatus systemboard"
-          capacity: "syscli --get diskusage"
-          dedup: "syscli --get datareductionstat"
-          vtls: "syscli --list vtl"
-          interfaces: "syscli --getstatus networkport"
-          network_config: "syscli --show netcfg"
-          admin_alerts: "syscli --list adminalert"
-          service_tickets: "syscli --list serviceticket --open"
+          common_components: "/hurricane/syscli --getstatus commoncomponent"
+          storage_arrays: "/hurricane/syscli --getstatus storagearray"
+          system_board: "/hurricane/syscli --getstatus systemboard"
+          capacity: "/hurricane/syscli --get diskusage"
+          dedup: "/hurricane/syscli --get datareductionstat"
+          vtls: "/hurricane/syscli --list vtl"
+          interfaces: "/hurricane/syscli --getstatus networkport"
+          network_config: "/hurricane/syscli --show netcfg"
+          admin_alerts: "/hurricane/syscli --list adminalert"
+          service_tickets: "/hurricane/syscli --list serviceticket --open"
 ---
 apiVersion: apps/v1
 kind: Deployment
