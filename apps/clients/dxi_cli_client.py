@@ -74,6 +74,12 @@ class DxiCliClient:
             "auth_timeout": self.config.command_timeout,
             "look_for_keys": False,
             "allow_agent": False,
+            "disabled_algorithms": {
+                "pubkeys": [
+                    "rsa-sha2-512",
+                    "rsa-sha2-256"
+                ]
+            }
         }
         if sock is not None:
             kwargs["sock"] = sock
