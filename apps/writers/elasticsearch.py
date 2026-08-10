@@ -83,7 +83,7 @@ class ElasticsearchWriter:
         raw_document = self._raw_document(result)
         source = self._networker_source(result)
         month = result.collected_at.strftime("%Y-%m")
-        raw_index = f"NW-OPS-RAW-{source.upper()}-{month}"
+        raw_index = self._normalize_index_name(f"NW-OPS-RAW-{source.upper()}-{month}")
         actions = [
             {
                 "_op_type": "index",
@@ -96,7 +96,7 @@ class ElasticsearchWriter:
             actions.append(
                 {
                     "_op_type": "index",
-                    "_index": f"NW-OPS-CURRENT-{source.upper()}",
+                    "_index": self._normalize_index_name(f"NW-OPS-CURRENT-{source.upper()}"),
                     "_id": self._current_document_id(result),
                     "_source": self._current_document(result),
                 }
@@ -107,7 +107,9 @@ class ElasticsearchWriter:
             actions.append(
                 {
                     "_op_type": "index",
-                    "_index": f"NW-{domain.upper()}-{document_type}-{month}",
+                    "_index": self._normalize_index_name(
+                        f"NW-{domain.upper()}-{document_type}-{month}"
+                    ),
                     "_id": document["derived_id"],
                     "_source": document,
                 }
@@ -122,11 +124,15 @@ class ElasticsearchWriter:
         if result:
             family = self._index_family(result)
             if document_type == "current":
-                return f"{family}-CURRENT"
+                return self._normalize_index_name(f"{family}-CURRENT")
             month = result.collected_at.strftime("%Y-%m")
-            return f"{family}-RAW-{month}"
+            return self._normalize_index_name(f"{family}-RAW-{month}")
 
-        return self.config.index_prefix
+        return self._normalize_index_name(self.config.index_prefix)
+
+    @staticmethod
+    def _normalize_index_name(index_name: str) -> str:
+        return index_name.lower()
 
     def _raw_document(self, result: CollectionResult) -> dict:
         document = result.to_document()

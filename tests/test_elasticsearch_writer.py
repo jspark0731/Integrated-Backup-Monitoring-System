@@ -20,14 +20,14 @@ def test_result_writes_raw_and_current_documents() -> None:
     actions = writer._actions_for_result(result)
 
     assert len(actions) == 2
-    assert actions[0]["_index"] == "VTL-RAW-2026-06"
+    assert actions[0]["_index"] == "vtl-raw-2026-06"
     assert actions[0]["_source"]["processing_mode"] == "elt"
     assert actions[0]["_source"]["document_family"] == "raw"
     assert actions[0]["_source"]["raw_document_id"] == actions[0]["_id"]
     assert actions[0]["_source"]["device_name"] == "DXi_1"
     assert actions[0]["_source"]["solution"] == "vtl"
     assert actions[0]["_source"]["collection_class"] == "fast"
-    assert actions[1]["_index"] == "VTL-CURRENT"
+    assert actions[1]["_index"] == "vtl-current"
     assert actions[1]["_id"] == "DXi_1:current"
     assert actions[1]["_source"]["current_document_id"] == "DXi_1:current"
     assert actions[1]["_source"]["processing_mode"] == "etl"
@@ -48,23 +48,23 @@ def test_raw_document_ids_keep_collection_history() -> None:
     actions = writer._actions_for_result(result)
 
     assert actions[0]["_id"].startswith("DD4500:raw:20260629T123001.")
-    assert actions[0]["_index"] == "VTL-RAW-2026-06"
-    assert actions[1]["_index"] == "VTL-CURRENT"
+    assert actions[0]["_index"] == "vtl-raw-2026-06"
+    assert actions[1]["_index"] == "vtl-current"
 
 
 def test_index_names_follow_target_specific_design() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     collected_at = datetime(2026, 6, 29, tzinfo=timezone.utc)
     cases = [
-        ("DXi_2", "DXi", "cli", "VTL-RAW-2026-06", "VTL-CURRENT"),
-        ("DD6900_1", "DD", "snmp", "VTL-RAW-2026-06", "VTL-CURRENT"),
-        ("DD6900_2", "DD", "snmp", "VTL-RAW-2026-06", "VTL-CURRENT"),
-        ("i6000_core_rest", "i6000", "rest", "PTL-RAW-2026-06", "PTL-CURRENT"),
-        ("i6000_chnl_rest", "i6000", "rest", "PTL-RAW-2026-06", "PTL-CURRENT"),
-        ("i6000_info_rest", "i6000", "rest", "PTL-RAW-2026-06", "PTL-CURRENT"),
-        ("i6000_ifrs_rest", "i6000", "rest", "PTL-RAW-2026-06", "PTL-CURRENT"),
-        ("ZFS_1", "ZFS", "rest", "ZFS-RAW-2026-06", "ZFS-CURRENT"),
-        ("ZFS_4", "ZFS", "rest", "ZFS-RAW-2026-06", "ZFS-CURRENT"),
+        ("DXi_2", "DXi", "cli", "vtl-raw-2026-06", "vtl-current"),
+        ("DD6900_1", "DD", "snmp", "vtl-raw-2026-06", "vtl-current"),
+        ("DD6900_2", "DD", "snmp", "vtl-raw-2026-06", "vtl-current"),
+        ("i6000_core_rest", "i6000", "rest", "ptl-raw-2026-06", "ptl-current"),
+        ("i6000_chnl_rest", "i6000", "rest", "ptl-raw-2026-06", "ptl-current"),
+        ("i6000_info_rest", "i6000", "rest", "ptl-raw-2026-06", "ptl-current"),
+        ("i6000_ifrs_rest", "i6000", "rest", "ptl-raw-2026-06", "ptl-current"),
+        ("ZFS_1", "ZFS", "rest", "zfs-raw-2026-06", "zfs-current"),
+        ("ZFS_4", "ZFS", "rest", "zfs-raw-2026-06", "zfs-current"),
     ]
 
     for collector, target_type, protocol, expected_raw, expected_current in cases:
@@ -95,9 +95,9 @@ def test_current_document_id_and_index_are_stable_across_months() -> None:
 
     actions = [writer._actions_for_result(result) for result in results]
 
-    assert actions[0][0]["_index"] == "VTL-RAW-2026-06"
-    assert actions[1][0]["_index"] == "VTL-RAW-2026-07"
-    assert actions[0][1]["_index"] == actions[1][1]["_index"] == "VTL-CURRENT"
+    assert actions[0][0]["_index"] == "vtl-raw-2026-06"
+    assert actions[1][0]["_index"] == "vtl-raw-2026-07"
+    assert actions[0][1]["_index"] == actions[1][1]["_index"] == "vtl-current"
     assert actions[0][1]["_id"] == actions[1][1]["_id"] == "DD4500:current"
 
 
@@ -115,7 +115,7 @@ def test_slow_collection_does_not_overwrite_current_status() -> None:
     actions = writer._actions_for_result(result)
 
     assert len(actions) == 1
-    assert actions[0]["_index"] == "PTL-RAW-2026-07"
+    assert actions[0]["_index"] == "ptl-raw-2026-07"
     assert actions[0]["_source"]["collection_class"] == "slow"
 
 
@@ -152,19 +152,19 @@ def test_networker_raw_document_can_be_transformed_to_derived_documents() -> Non
 def test_networker_actions_route_ops_and_domain_entity_indexes() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     result = CollectionResult(
-        collector="networker_chnl",
+        collector="NETWORKER_CHNL",
         target_type="Networker",
         protocol="rest",
         collected_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
         ok=True,
         payload={
-            "summary": {"source_networker": "chnl"},
+            "summary": {"source_networker": "CHNL", "device_name": "NW-CHNL-01"},
             "jobs": [
                 {
                     "job_id": "job-1",
                     "client_name": "core-db01.example.com",
                     "source_networker": "chnl",
-                    "security_domain": "core",
+                    "security_domain": "CORE",
                 }
             ],
             "clients": [
@@ -174,16 +174,42 @@ def test_networker_actions_route_ops_and_domain_entity_indexes() -> None:
                     "security_domain": "unmapped",
                 }
             ],
+            "policies": [
+                {
+                    "policy_name": "Bronze",
+                    "source_networker": "CHNL",
+                    "security_domain": "CORE",
+                }
+            ],
+            "workflows": [
+                {
+                    "policy_name": "Bronze",
+                    "workflow_name": "Filesystem",
+                    "source_networker": "CHNL",
+                    "security_domain": "CORE",
+                }
+            ],
+            "monthly_report": [
+                {
+                    "policy_name": "Bronze",
+                    "month": "2026-07",
+                    "source_networker": "CHNL",
+                    "security_domain": "CORE",
+                }
+            ],
         },
     )
 
     actions = writer._actions_for_result(result)
 
     assert [action["_index"] for action in actions] == [
-        "NW-OPS-RAW-CHNL-2026-07",
-        "NW-OPS-CURRENT-CHNL",
-        "NW-CORE-JOB-2026-07",
-        "NW-UNMAPPED-CLIENT-2026-07",
+        "nw-ops-raw-chnl-2026-07",
+        "nw-ops-current-chnl",
+        "nw-core-job-2026-07",
+        "nw-unmapped-client-2026-07",
+        "nw-core-policy-2026-07",
+        "nw-core-workflow-2026-07",
+        "nw-core-monthly-2026-07",
     ]
     required_fields = {
         "collector",
@@ -223,8 +249,8 @@ def test_networker_slow_collection_keeps_derived_data_without_current_write() ->
     actions = writer._actions_for_result(result)
 
     assert [action["_index"] for action in actions] == [
-        "NW-OPS-RAW-INFO-2026-07",
-        "NW-INFO-CLIENT-2026-07",
+        "nw-ops-raw-info-2026-07",
+        "nw-info-client-2026-07",
     ]
 
 
