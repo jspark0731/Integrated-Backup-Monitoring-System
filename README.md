@@ -11,7 +11,7 @@ DXi ── SSH CLI ────────┐
 DD ─── SNMP ───────────┤
 i6000 ─ REST ──────────┤
 NetWorker ─ REST ──────┼─> CollectorScheduler ─┬─> Prometheus /metrics
-ZFS ── REST ───────────┘                      └─> Elasticsearch bulk write
+ZFS ── REST ───────────┘                       └─> Elasticsearch bulk write
 ```
 
 Kubernetes에서는 solution별로 다음 5개 Deployment를 사용합니다.
