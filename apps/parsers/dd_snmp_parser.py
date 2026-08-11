@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 GIB = 1024**3
@@ -8,6 +9,7 @@ GIB = 1024**3
 def parse_dd_snmp_payload(payload: dict[str, Any], fallback_name: str) -> dict[str, Any]:
     device_name = _first_value(payload.get("system_hostname")) or fallback_name
     capacity = _parse_capacity(payload)
+    compression = _parse_compression(payload)
     ddboost = _parse_ddboost(payload)
 
     return {
@@ -17,12 +19,52 @@ def parse_dd_snmp_payload(payload: dict[str, Any], fallback_name: str) -> dict[s
         "version": _first_value(payload.get("system_version")),
         "file_system_status": _first_value(payload.get("file_system_status")),
         "capacity": capacity,
-        "dedup_ratio": _first_float(payload.get("file_system_total_compression_factor")),
+        "compression": compression,
+        "dedup_ratio": _first_compression_value(compression, "global_ratio"),
+        "compression_ratio": _first_compression_value(compression, "local_ratio"),
         "reduction_percent": _first_float(payload.get("file_system_reduction_percent")),
         "alert_counts": _count_values(payload.get("current_alert_severity")),
         "replication": _parse_replication(payload),
         "ddboost": ddboost,
     }
+
+
+def _parse_compression(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = _table_rows(
+        {
+            "period": payload.get("file_system_compression_period"),
+            "pre_compression_gib": payload.get("file_system_pre_compression_size"),
+            "post_compression_gib": payload.get("file_system_post_compression_size"),
+            "global_ratio": payload.get("file_system_global_compression_factor"),
+            "local_ratio": payload.get("file_system_local_compression_factor"),
+            "total_ratio": payload.get("file_system_total_compression_factor"),
+            "reduction_percent": payload.get("file_system_reduction_percent"),
+        },
+        numeric_keys={
+            "pre_compression_gib",
+            "post_compression_gib",
+            "global_ratio",
+            "local_ratio",
+            "total_ratio",
+            "reduction_percent",
+        },
+    )
+    for row in rows:
+        pre_gib = row.pop("pre_compression_gib", None)
+        post_gib = row.pop("post_compression_gib", None)
+        row["pre_compression_bytes"] = pre_gib * GIB if pre_gib is not None else None
+        row["post_compression_bytes"] = post_gib * GIB if post_gib is not None else None
+        if row.get("total_ratio") is None and pre_gib is not None and post_gib not in {None, 0}:
+            row["total_ratio"] = pre_gib / post_gib
+    return rows
+
+
+def _first_compression_value(rows: list[dict[str, Any]], key: str) -> float | None:
+    for row in rows:
+        value = row.get(key)
+        if value is not None:
+            return value
+    return None
 
 
 def _parse_capacity(payload: dict[str, Any]) -> dict[str, float | None]:
@@ -148,10 +190,10 @@ def _first_float(value: Any) -> float | None:
 def _to_float(value: Any) -> float | None:
     if value is None:
         return None
-    try:
-        return float(str(value).replace(",", "").strip().rstrip("%").split(":")[0])
-    except ValueError:
+    match = re.search(r"[-+]?(?:\d+(?:,\d{3})*(?:\.\d+)?|\.\d+)", str(value).strip())
+    if match is None:
         return None
+    return float(match.group(0).replace(",", ""))
 
 
 def _count_values(value: Any) -> dict[str, int]:

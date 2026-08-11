@@ -9,6 +9,12 @@ from apps.collectors.i6000_rest_collector import I6000RestCollector, parse_i6000
 from apps.collectors.networker_rest_collector import NetworkerRestCollector, parse_networker_rest_payload
 from apps.collectors.zfs_rest_collector import ZfsRestCollector, parse_zfs_rest_payload
 from apps.core.config import CollectorConfig
+from apps.core.metrics import (
+    BACKUP_COMP_RATIO,
+    BACKUP_COMPRESSION_RATIO,
+    BACKUP_COMPRESSION_SIZE_BYTES,
+    BACKUP_DEDUP_RATIO,
+)
 
 
 @pytest.mark.asyncio
@@ -60,7 +66,30 @@ def test_dd_snmp_parser_extracts_ddboost_summary_values() -> None:
             "file_system_space_size": [{"oid": "x.1", "instance": "1", "value": "100"}],
             "file_system_space_used": [{"oid": "x.1", "instance": "1", "value": "72"}],
             "file_system_percent_used": [{"oid": "x.1", "instance": "1", "value": "72"}],
-            "file_system_total_compression_factor": [{"oid": "x.1", "instance": "1", "value": "12.5"}],
+            "file_system_compression_period": [
+                {"oid": "x.1", "instance": "1", "value": "last-24-hours"},
+                {"oid": "x.2", "instance": "2", "value": "last-7-days"},
+            ],
+            "file_system_pre_compression_size": [
+                {"oid": "x.1", "instance": "1", "value": "125 GiB"},
+                {"oid": "x.2", "instance": "2", "value": "700 GiB"},
+            ],
+            "file_system_post_compression_size": [
+                {"oid": "x.1", "instance": "1", "value": "10 GiB"},
+                {"oid": "x.2", "instance": "2", "value": "50 GiB"},
+            ],
+            "file_system_global_compression_factor": [
+                {"oid": "x.1", "instance": "1", "value": "6.25x"},
+                {"oid": "x.2", "instance": "2", "value": "7x"},
+            ],
+            "file_system_local_compression_factor": [
+                {"oid": "x.1", "instance": "1", "value": "2x"},
+                {"oid": "x.2", "instance": "2", "value": "2x"},
+            ],
+            "file_system_total_compression_factor": [
+                {"oid": "x.1", "instance": "1", "value": "12.5 : 1"},
+                {"oid": "x.2", "instance": "2", "value": "14 : 1"},
+            ],
             "current_alert_severity": [
                 {"oid": "x.1", "instance": "1", "value": "critical"},
                 {"oid": "x.2", "instance": "2", "value": "warning"},
@@ -82,7 +111,13 @@ def test_dd_snmp_parser_extracts_ddboost_summary_values() -> None:
     assert summary["serial_number"] == "SN123"
     assert summary["capacity"]["total_bytes"] == 100 * 1024**3
     assert summary["capacity"]["used_percent"] == 72
-    assert summary["dedup_ratio"] == 12.5
+    assert summary["dedup_ratio"] == 6.25
+    assert summary["compression_ratio"] == 2
+    assert summary["compression"][0]["period"] == "last-24-hours"
+    assert summary["compression"][0]["pre_compression_bytes"] == 125 * 1024**3
+    assert summary["compression"][0]["post_compression_bytes"] == 10 * 1024**3
+    assert summary["compression"][0]["total_ratio"] == 12.5
+    assert summary["compression"][1]["total_ratio"] == 14
     assert summary["alert_counts"]["warning"] == 2
     assert summary["replication"][0]["up"] == 1
     assert summary["ddboost"]["enabled"] is True
@@ -114,6 +149,50 @@ def test_dd_snmp_collector_accepts_data_domain_mib_oids() -> None:
 
     assert isinstance(collector, DDSnmpCollector)
     assert collector.config.skip_reason is None
+
+
+def test_dd_snmp_collector_publishes_file_system_compression_metrics() -> None:
+    collector = DDSnmpCollector(
+        CollectorConfig(
+            name="DD_compression_test",
+            type="DD",
+            protocol="snmp",
+            enabled=True,
+            host="192.0.2.31",
+            community="public",
+            oids={"ddboost_status": "1.3.6.1.4.1.19746.1.12.1.1.0"},
+        )
+    )
+    collector._publish_metrics(
+        {
+            "device_name": "DD_compression_test",
+            "capacity": {},
+            "dedup_ratio": 6.25,
+            "compression_ratio": 2,
+            "compression": [
+                {
+                    "instance": "1",
+                    "period": "last-24-hours",
+                    "pre_compression_bytes": 125 * 1024**3,
+                    "post_compression_bytes": 10 * 1024**3,
+                    "total_ratio": 12.5,
+                }
+            ],
+            "ddboost": {},
+        }
+    )
+
+    assert BACKUP_COMPRESSION_RATIO.labels(
+        "dd", "DD_compression_test", "last-24-hours"
+    )._value.get() == 12.5
+    assert BACKUP_COMPRESSION_SIZE_BYTES.labels(
+        "dd", "DD_compression_test", "last-24-hours", "pre_compression"
+    )._value.get() == 125 * 1024**3
+    assert BACKUP_COMPRESSION_SIZE_BYTES.labels(
+        "dd", "DD_compression_test", "last-24-hours", "post_compression"
+    )._value.get() == 10 * 1024**3
+    assert BACKUP_DEDUP_RATIO.labels("dd", "DD_compression_test")._value.get() == 6.25
+    assert BACKUP_COMP_RATIO.labels("dd", "DD_compression_test")._value.get() == 2
 
 
 def test_dxi_legacy_ssh_collector_is_rejected() -> None:
@@ -316,6 +395,22 @@ def test_dxi_cli_parser_extracts_summary_values() -> None:
     assert summary["interfaces"][0]["speed_bps"] == 1_000_000_000
     assert summary["alert_counts"]["unclassified"] == 1
     assert summary["alert_counts"]["total"] == 1
+
+    collector = DXiCliCollector(
+        CollectorConfig(
+            name="DXi_1",
+            type="DXi",
+            protocol="cli",
+            enabled=True,
+            host="192.0.2.32",
+            username="admin",
+            password="secret",
+            commands={"dedup": "show data reduction"},
+        )
+    )
+    collector._publish_metrics(summary)
+    assert BACKUP_DEDUP_RATIO.labels("dxi", "P1-VTL")._value.get() == 2.35
+    assert BACKUP_COMP_RATIO.labels("dxi", "P1-VTL")._value.get() == 1.93
 
 
 def test_i6000_rest_parser_extracts_tape_summary_values() -> None:

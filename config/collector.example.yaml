@@ -24,6 +24,11 @@ x-dd-walk-oids: &dd_walk_oids
   file_system_space_used: 1.3.6.1.4.1.19746.1.3.2.1.1.5
   file_system_space_available: 1.3.6.1.4.1.19746.1.3.2.1.1.6
   file_system_percent_used: 1.3.6.1.4.1.19746.1.3.2.1.1.7
+  file_system_compression_period: 1.3.6.1.4.1.19746.1.3.3.1.1.2
+  file_system_pre_compression_size: 1.3.6.1.4.1.19746.1.3.3.1.1.5
+  file_system_post_compression_size: 1.3.6.1.4.1.19746.1.3.3.1.1.6
+  file_system_global_compression_factor: 1.3.6.1.4.1.19746.1.3.3.1.1.7
+  file_system_local_compression_factor: 1.3.6.1.4.1.19746.1.3.3.1.1.8
   file_system_total_compression_factor: 1.3.6.1.4.1.19746.1.3.3.1.1.9
   file_system_reduction_percent: 1.3.6.1.4.1.19746.1.3.3.1.1.11
   current_alert_severity: 1.3.6.1.4.1.19746.1.4.1.1.1.4

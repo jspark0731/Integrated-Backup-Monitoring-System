@@ -6,6 +6,8 @@ from typing import Any
 from apps.clients.dxi_cli_client import DxiCliClient
 from apps.collectors.base import BaseCollector
 from apps.core.metrics import (
+    BACKUP_COMP_RATIO,
+    BACKUP_DEDUP_RATIO,
     DEVICE_ALERT_COUNT,
     DEVICE_CAPACITY_AVAILABLE_BYTES,
     DEVICE_CAPACITY_TOTAL_BYTES,
@@ -53,12 +55,14 @@ class DXiCliCollector(BaseCollector):
 
         if summary.get("dedup_ratio") is not None:
             DEVICE_DEDUP_RATIO.labels(device_type, device_name).set(summary["dedup_ratio"])
+            BACKUP_DEDUP_RATIO.labels(device_type, device_name).set(summary["dedup_ratio"])
 
         reduction = summary.get("data_reduction", {})
         if reduction.get("total_reduction_ratio") is not None:
             DXI_TOTAL_REDUCTION_RATIO.labels(device_name).set(reduction["total_reduction_ratio"])
         if reduction.get("compression_ratio") is not None:
             DXI_COMPRESSION_RATIO.labels(device_name).set(reduction["compression_ratio"])
+            BACKUP_COMP_RATIO.labels(device_type, device_name).set(reduction["compression_ratio"])
 
         for severity, count in summary.get("alert_counts", {}).items():
             DEVICE_ALERT_COUNT.labels(device_type, device_name, severity).set(count)

@@ -230,10 +230,20 @@ payload
 | `serial_number`, `model`, `version`, `file_system_status` | `string nullable` |
 | `capacity.total_bytes`, `capacity.used_bytes`, `capacity.available_bytes` | `number nullable` |
 | `capacity.used_percent` | `number nullable` |
-| `dedup_ratio`, `reduction_percent` | `number nullable` |
+| `dedup_ratio`, `compression_ratio`, `reduction_percent` | `number nullable` |
+| `compression` | `array<DD File System Compression>` |
 | `alert_counts` | `object<string, integer>` |
 | `replication` | `array<Replication>` |
 | `ddboost` | `DD Boost` |
+
+**DD File System Compression**
+
+| Field | Type |
+|---|---|
+| `instance`, `period` | `string` |
+| `pre_compression_bytes`, `post_compression_bytes` | `number nullable` |
+| `global_ratio`, `local_ratio`, `total_ratio` | `number nullable` |
+| `reduction_percent` | `number nullable` |
 
 **Replication**
 
@@ -477,6 +487,10 @@ Counter는 노출 시 `_total` 이름을 유지하며 런타임에 `_created`가
 | `backup_device_capacity_used_bytes` | Gauge | `device_type,device_name` | bytes |
 | `backup_device_capacity_used_percent` | Gauge | `device_type,device_name` | percent |
 | `backup_device_dedup_ratio` | Gauge | `device_type,device_name` | ratio |
+| `backup_dedup_ratio` | Gauge | `device_type,device_name` | DD global / DXi deduplication ratio |
+| `backup_comp_ratio` | Gauge | `device_type,device_name` | DD local / DXi compression ratio |
+| `backup_compression_ratio` | Gauge | `device_type,device_name,period` | pre-comp/post-comp ratio |
+| `backup_compression_size_bytes` | Gauge | `device_type,device_name,period,stage` | bytes; stage=`pre_compression/post_compression` |
 | `backup_device_alert_count` | Gauge | `device_type,device_name,severity` | 건수 |
 | `backup_device_replication_up` | Gauge | `device_type,device_name,replication` | `1`=정상/활성 |
 | `backup_device_interface_up` | Gauge | `device_type,device_name,interface` | `1`=up |

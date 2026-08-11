@@ -13,28 +13,28 @@ dependencies = [
 
 [project.optional-dependencies]
 dxi = [
-    "elasticsearch==9.4.1",
+    "elasticsearch[async]==9.4.1",
     "paramiko>=3.4.0",
     "pysnmp==7.1.27",
 ]
 dd = [
-    "elasticsearch==9.4.1",
+    "elasticsearch[async]==9.4.1",
     "pysnmp==7.1.27",
 ]
 i6000 = [
-    "elasticsearch==9.4.1",
+    "elasticsearch[async]==9.4.1",
     "httpx>=0.27.0",
 ]
 networker = [
-    "elasticsearch==9.4.1",
+    "elasticsearch[async]==9.4.1",
     "httpx>=0.27.0",
 ]
 zfs = [
-    "elasticsearch==9.4.1",
+    "elasticsearch[async]==9.4.1",
     "httpx>=0.27.0",
 ]
 dev = [
-    "elasticsearch==9.4.1",
+    "elasticsearch[async]==9.4.1",
     "httpx>=0.27.0",
     "paramiko>=3.4.0",
     "pysnmp==7.1.27",

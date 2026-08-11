@@ -9,7 +9,7 @@ and DD Boost monitoring under the Dell enterprise tree `1.3.6.1.4.1.19746`.
 | --- | --- | --- |
 | System identity | serial number, DD OS version, model | `dataDomainSystem` |
 | File system capacity | status, total GiB, used GiB, available GiB, percent used | `fileSystem` |
-| Dedup/compression | total compression factor, reduction percent | `fileSystemCompression` |
+| Dedup/compression | period, pre/post size, global/local/total factor, reduction percent | `fileSystemCompression` |
 | Alerts | current alert severity rows | `alerts` |
 | Replication | state, status, source, destination | `replication` |
 | DD Boost state | enabled/disabled | `ddboostProperties` |
@@ -53,6 +53,11 @@ Walk OIDs:
 | `file_system_space_used` | `1.3.6.1.4.1.19746.1.3.2.1.1.5` |
 | `file_system_space_available` | `1.3.6.1.4.1.19746.1.3.2.1.1.6` |
 | `file_system_percent_used` | `1.3.6.1.4.1.19746.1.3.2.1.1.7` |
+| `file_system_compression_period` | `1.3.6.1.4.1.19746.1.3.3.1.1.2` |
+| `file_system_pre_compression_size` | `1.3.6.1.4.1.19746.1.3.3.1.1.5` |
+| `file_system_post_compression_size` | `1.3.6.1.4.1.19746.1.3.3.1.1.6` |
+| `file_system_global_compression_factor` | `1.3.6.1.4.1.19746.1.3.3.1.1.7` |
+| `file_system_local_compression_factor` | `1.3.6.1.4.1.19746.1.3.3.1.1.8` |
 | `file_system_total_compression_factor` | `1.3.6.1.4.1.19746.1.3.3.1.1.9` |
 | `current_alert_severity` | `1.3.6.1.4.1.19746.1.4.1.1.1.4` |
 | `replication_state` | `1.3.6.1.4.1.19746.1.8.1.1.1.3` |
@@ -79,3 +84,16 @@ Walk OIDs:
 | `ddboost_storage_unit_user` | `1.3.6.1.4.1.19746.1.12.4.1.1.9` |
 | `ddboost_storage_unit_report_physical_size` | `1.3.6.1.4.1.19746.1.12.4.1.1.10` |
 | `ddboost_storage_unit_bytes_hc` | `1.3.6.1.4.1.19746.1.12.4.1.1.11` |
+
+## Common Ratio Metrics
+
+DD and DXi publish the same normalized metric names for Grafana tables:
+
+```text
+backup_dedup_ratio{device_type="dd",device_name="DD6900_1"} 6.25
+backup_comp_ratio{device_type="dd",device_name="DD6900_1"} 2
+```
+
+For DD, the dedup ratio uses the file-system global compression factor and the
+compression ratio uses the local compression factor. The period-specific total
+pre-comp/post-comp ratio remains available as `backup_compression_ratio`.

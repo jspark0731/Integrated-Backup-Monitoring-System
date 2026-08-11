@@ -108,6 +108,8 @@ backup_device_capacity_total_bytes{device_type="dxi",device_name="DXi_1"} 100000
 backup_device_capacity_used_bytes{device_type="dxi",device_name="DXi_1"} 72000000000000
 backup_device_capacity_used_percent{device_type="dxi",device_name="DXi_1"} 72
 backup_device_dedup_ratio{device_type="dxi",device_name="DXi_1"} 2.35
+backup_dedup_ratio{device_type="dxi",device_name="DXi_1"} 2.35
+backup_comp_ratio{device_type="dxi",device_name="DXi_1"} 1.93
 backup_dxi_total_reduction_ratio{device_name="DXi_1"} 4.53
 backup_dxi_compression_ratio{device_name="DXi_1"} 1.93
 backup_dxi_vtl_online{device_name="DXi_1",vtl="VTL1"} 1

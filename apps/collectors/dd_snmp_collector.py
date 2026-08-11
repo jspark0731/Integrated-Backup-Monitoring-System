@@ -6,6 +6,10 @@ from typing import Any
 from apps.clients.snmp_client import SnmpClient
 from apps.collectors.base import BaseCollector
 from apps.core.metrics import (
+    BACKUP_COMP_RATIO,
+    BACKUP_COMPRESSION_RATIO,
+    BACKUP_COMPRESSION_SIZE_BYTES,
+    BACKUP_DEDUP_RATIO,
     DD_DDBOOST_CONNECTIONS,
     DD_DDBOOST_STORAGE_UNIT_BYTES,
     DD_DDBOOST_STORAGE_UNIT_COMPRESSION,
@@ -51,6 +55,20 @@ class DDSnmpCollector(BaseCollector):
 
         if summary.get("dedup_ratio") is not None:
             DEVICE_DEDUP_RATIO.labels(device_type, device_name).set(summary["dedup_ratio"])
+            BACKUP_DEDUP_RATIO.labels(device_type, device_name).set(summary["dedup_ratio"])
+        if summary.get("compression_ratio") is not None:
+            BACKUP_COMP_RATIO.labels(device_type, device_name).set(summary["compression_ratio"])
+
+        for compression in summary.get("compression", []):
+            period = str(compression.get("period") or compression.get("instance") or "unknown")
+            if compression.get("total_ratio") is not None:
+                BACKUP_COMPRESSION_RATIO.labels(device_type, device_name, period).set(
+                    compression["total_ratio"]
+                )
+            for stage in ("pre_compression", "post_compression"):
+                value = compression.get(f"{stage}_bytes")
+                if value is not None:
+                    BACKUP_COMPRESSION_SIZE_BYTES.labels(device_type, device_name, period, stage).set(value)
 
         for severity, count in summary.get("alert_counts", {}).items():
             DEVICE_ALERT_COUNT.labels(device_type, device_name, severity).set(count)

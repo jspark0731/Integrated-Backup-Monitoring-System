@@ -74,6 +74,30 @@ DEVICE_DEDUP_RATIO = Gauge(
     ["device_type", "device_name"],
 )
 
+BACKUP_DEDUP_RATIO = Gauge(
+    "backup_dedup_ratio",
+    "Deduplication ratio shared by backup storage platforms",
+    ["device_type", "device_name"],
+)
+
+BACKUP_COMP_RATIO = Gauge(
+    "backup_comp_ratio",
+    "Local compression ratio shared by backup storage platforms",
+    ["device_type", "device_name"],
+)
+
+BACKUP_COMPRESSION_RATIO = Gauge(
+    "backup_compression_ratio",
+    "Effective pre-compression to post-compression ratio",
+    ["device_type", "device_name", "period"],
+)
+
+BACKUP_COMPRESSION_SIZE_BYTES = Gauge(
+    "backup_compression_size_bytes",
+    "Pre-compression or post-compression size in bytes",
+    ["device_type", "device_name", "period", "stage"],
+)
+
 DXI_TOTAL_REDUCTION_RATIO = Gauge(
     "backup_dxi_total_reduction_ratio",
     "DXi total data reduction ratio",
