@@ -19,42 +19,42 @@ COPY ./wheelhouse /wheelhouse
 RUN python -m pip install \
       --no-cache-dir \
       --no-index \
-      --find-links=/wheelhouse \
+      --find-links=./wheelhouse \
       ".[dxi]" \
-    && rm -rf /wheelhouse
+    && rm -rf ./wheelhouse
 
 FROM base AS dd
 COPY ./wheelhouse /wheelhouse
 RUN python -m pip install \
       --no-cache-dir \
       --no-index \
-      --find-links=/wheelhouse \
+      --find-links=./wheelhouse \
       ".[dd]" \
-    && rm -rf /wheelhouse
+    && rm -rf ./wheelhouse
 
 FROM base AS i6000
 COPY ./wheelhouse /wheelhouse
 RUN python -m pip install \
       --no-cache-dir \
       --no-index \
-      --find-links=/wheelhouse \
+      --find-links=./wheelhouse \
       ".[i6000]" \
-    && rm -rf /wheelhouse
+    && rm -rf ./wheelhouse
 
 FROM base AS networker
 COPY ./wheelhouse /wheelhouse
 RUN python -m pip install \
       --no-cache-dir \
       --no-index \
-      --find-links=/wheelhouse \
+      --find-links=./wheelhouse \
       ".[networker]" \
-    && rm -rf /wheelhouse
+    && rm -rf ./wheelhouse
 
 FROM base AS zfs
 COPY ./wheelhouse /wheelhouse
 RUN python -m pip install \
       --no-cache-dir \
       --no-index \
-      --find-links=/wheelhouse \
+      --find-links=./wheelhouse \
       ".[zfs]" \
-    && rm -rf /wheelhouse
+    && rm -rf ./wheelhouse
