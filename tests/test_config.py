@@ -43,7 +43,7 @@ def test_to_be_filled_is_detected() -> None:
 def test_example_config_loads_and_marks_collectors_skipped() -> None:
     config = load_config(Path("config/collector.example.yaml"))
 
-    assert len(config.collectors) == 17
+    assert len(config.collectors) == 16
     assert all(collector.skip_reason for collector in config.collectors)
     assert not any(collector.type == "i6000" and collector.protocol == "snmp" for collector in config.collectors)
 
@@ -53,7 +53,7 @@ def test_group_example_configs_load_expected_collectors() -> None:
         "dxi": (2, {"DXi"}),
         "dd": (3, {"DD"}),
         "i6000": (4, {"i6000"}),
-        "networker": (4, {"Networker"}),
+        "networker": (3, {"Networker"}),
         "zfs": (4, {"ZFS"}),
     }
 
@@ -221,6 +221,51 @@ collectors:
     collector = load_config(config_path).collectors[0]
 
     assert collector.skip_reason == "invalid rest.max_concurrency: 0"
+
+
+def test_networker_requires_basic_auth_and_rejects_ifrs(tmp_path: Path) -> None:
+    classification = tmp_path / "hostname_domain.csv"
+    classification.write_text("hostname,security_domain\n", encoding="utf-8")
+
+    missing_basic_auth = load_config(
+        _write_networker_config(tmp_path, classification, source="core", credentials="")
+    ).collectors[0]
+    assert missing_basic_auth.skip_reason == "REST config contains TO_BE_FILLED values"
+
+    ifrs = load_config(
+        _write_networker_config(
+            tmp_path,
+            classification,
+            source="ifrs",
+            credentials="    username: rest-user\n    password: secret\n",
+        )
+    ).collectors[0]
+    assert ifrs.skip_reason == "unsupported source_networker: ifrs"
+
+
+def _write_networker_config(
+    tmp_path: Path,
+    classification: Path,
+    *,
+    source: str,
+    credentials: str,
+) -> Path:
+    config_path = tmp_path / f"collector-{source}.yaml"
+    config_path.write_text(
+        f"""
+collectors:
+  - name: networker_{source}
+    type: Networker
+    protocol: rest
+    enabled: true
+    base_url: https://networker.example.com:9090
+{credentials}    source_networker: {source}
+    classification:
+      hostname_csv_path: {classification}
+""",
+        encoding="utf-8",
+    )
+    return config_path
 
 
 def test_config_loads_secret_values_from_files(tmp_path: Path) -> None:

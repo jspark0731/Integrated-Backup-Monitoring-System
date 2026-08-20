@@ -238,7 +238,7 @@ async def test_stop_closes_collector_resources_and_writer() -> None:
 
 
 @pytest.mark.asyncio
-async def test_four_networker_collectors_run_independently_in_one_scheduler(
+async def test_three_networker_collectors_run_independently_in_one_scheduler(
     tmp_path,
 ) -> None:
     classification = tmp_path / "hostname_domain.csv"
@@ -253,7 +253,7 @@ async def test_four_networker_collectors_run_independently_in_one_scheduler(
             raise RuntimeError("CORE collection failed")
 
     collectors = []
-    for source in ("core", "chnl", "info", "ifrs"):
+    for source in ("core", "chnl", "info"):
         config = CollectorConfig(
             name=f"networker_{source}",
             type="Networker",
@@ -261,7 +261,8 @@ async def test_four_networker_collectors_run_independently_in_one_scheduler(
             enabled=True,
             schedule=ScheduleConfig(5, 3, 0),
             base_url=f"https://networker-{source}.example.com",
-            token="secret",
+            username="rest-user",
+            password="secret",
             source_networker=source,
             hostname_csv_path=str(classification),
         )
@@ -272,9 +273,9 @@ async def test_four_networker_collectors_run_independently_in_one_scheduler(
 
     results = await scheduler.run_once()
 
-    assert len(results) == 4
+    assert len(results) == 3
     assert not scheduler.last_results["networker_core"].ok
     assert all(
         scheduler.last_results[f"networker_{source}"].ok
-        for source in ("chnl", "info", "ifrs")
+        for source in ("chnl", "info")
     )

@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 
-def test_networker_manifest_has_one_workload_with_four_collectors() -> None:
+def test_networker_manifest_has_one_workload_with_three_basic_auth_collectors() -> None:
     documents = list(yaml.safe_load_all(Path("k8s/networker.yaml").read_text(encoding="utf-8")))
     resources = {document["kind"]: document for document in documents}
 
@@ -18,15 +18,28 @@ def test_networker_manifest_has_one_workload_with_four_collectors() -> None:
         "networker_core",
         "networker_chnl",
         "networker_info",
-        "networker_ifrs",
     ]
     assert {collector["source_networker"] for collector in collectors} == {
         "core",
         "chnl",
         "info",
-        "ifrs",
     }
     assert all(set(collector["schedule"]) == {"fast", "slow"} for collector in collectors)
+    assert all("token_file" not in collector for collector in collectors)
+    assert all(collector["username_file"] for collector in collectors)
+    assert all(collector["password_file"] for collector in collectors)
+    assert all(collector["ca_certs"] for collector in collectors)
+
+    secret_items = resources["Deployment"]["spec"]["template"]["spec"]["volumes"][1][
+        "secret"
+    ]["items"]
+    secret_keys = {item["key"] for item in secret_items}
+    assert {
+        "networker-core-ca-crt",
+        "networker-chnl-ca-crt",
+        "networker-info-ca-crt",
+    } <= secret_keys
+    assert not any("token" in key or "ifrs" in key for key in secret_keys)
 
 
 def test_kustomization_references_only_consolidated_networker_manifest() -> None:

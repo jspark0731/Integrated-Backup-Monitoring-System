@@ -9,7 +9,7 @@
 | `backup-dashboard-collector-dxi` | 2 | 동일 이름 |
 | `backup-dashboard-collector-dd` | 3 | 동일 이름 |
 | `backup-dashboard-collector-i6000` | 4 | 동일 이름 |
-| `backup-dashboard-collector-networker` | 4 | 동일 이름 |
+| `backup-dashboard-collector-networker` | 3 | 동일 이름 |
 | `backup-dashboard-collector-zfs` | 4 | 동일 이름 |
 
 모든 Deployment는 replica 1을 기본으로 한다. 같은 Collector를 여러 replica로
@@ -57,23 +57,38 @@ NetWorker 통합 Secret은 다음 key를 포함해야 한다.
 elasticsearch-username
 elasticsearch-password
 elasticsearch-ca-crt
-networker-core-token
+networker-core-ca-crt
 networker-core-username
 networker-core-password
-networker-chnl-token
+networker-chnl-ca-crt
 networker-chnl-username
 networker-chnl-password
-networker-info-token
+networker-info-ca-crt
 networker-info-username
 networker-info-password
-networker-ifrs-token
-networker-ifrs-username
-networker-ifrs-password
 ```
 
-NetWorker에서 token 인증만 사용하더라도 manifest에 선언된 username/password
-key는 빈 값으로 생성해 volume mount가 실패하지 않게 한다. 반대로 basic auth만
-사용하면 token key를 빈 값으로 둔다.
+NetWorker REST API는 username/password Basic 인증을 사용한다. CORE, CHNL,
+INFO 서버 인증서가 서로 다를 수 있으므로 CA 또는 self-signed certificate를
+각각 `--from-file`로 저장하고 Collector별 `ca_certs` 경로로 검증한다.
+
+```bash
+kubectl create secret generic backup-dashboard-collector-networker-secrets \
+  --namespace backup-dashboard \
+  --from-file=elasticsearch-ca-crt=/secure/elasticsearch-ca.crt \
+  --from-literal=elasticsearch-username=ELASTICSEARCH_USERNAME \
+  --from-literal=elasticsearch-password=ELASTICSEARCH_PASSWORD \
+  --from-file=networker-core-ca-crt=/secure/networker-core.cer \
+  --from-literal=networker-core-username=CORE_USERNAME \
+  --from-literal=networker-core-password=CORE_PASSWORD \
+  --from-file=networker-chnl-ca-crt=/secure/networker-chnl.cer \
+  --from-literal=networker-chnl-username=CHNL_USERNAME \
+  --from-literal=networker-chnl-password=CHNL_PASSWORD \
+  --from-file=networker-info-ca-crt=/secure/networker-info.cer \
+  --from-literal=networker-info-username=INFO_USERNAME \
+  --from-literal=networker-info-password=INFO_PASSWORD \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
 
 ## 기본 리소스
 

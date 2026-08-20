@@ -28,18 +28,17 @@ collectors:
         second: 30
     base_url: networker_core_base_url_TO_BE_FILLED
     method: GET
-    token: networker_core_token_TO_BE_FILLED
     username: networker_core_username_TO_BE_FILLED
     password: networker_core_password_TO_BE_FILLED
     verify_tls: true
+    ca_certs: networker_core_ca_certs_TO_BE_FILLED
     rest:
       max_concurrency: 4
     source_networker: core
     classification:
       hostname_csv_path: /apps/config/hostname_domain.csv
-      allowed_domains: [core, chnl, info, ifrs]
+      allowed_domains: [core, chnl, info]
       unmapped_domain: unmapped
-
   - name: networker_chnl
     type: Networker
     protocol: rest
@@ -55,18 +54,17 @@ collectors:
         second: 30
     base_url: networker_chnl_base_url_TO_BE_FILLED
     method: GET
-    token: networker_chnl_token_TO_BE_FILLED
     username: networker_chnl_username_TO_BE_FILLED
     password: networker_chnl_password_TO_BE_FILLED
     verify_tls: true
+    ca_certs: networker_chnl_ca_certs_TO_BE_FILLED
     rest:
       max_concurrency: 4
     source_networker: chnl
     classification:
       hostname_csv_path: /apps/config/hostname_domain.csv
-      allowed_domains: [core, chnl, info, ifrs]
+      allowed_domains: [core, chnl, info]
       unmapped_domain: unmapped
-
   - name: networker_info
     type: Networker
     protocol: rest
@@ -82,41 +80,15 @@ collectors:
         second: 30
     base_url: networker_info_base_url_TO_BE_FILLED
     method: GET
-    token: networker_info_token_TO_BE_FILLED
     username: networker_info_username_TO_BE_FILLED
     password: networker_info_password_TO_BE_FILLED
     verify_tls: true
+    ca_certs: networker_info_ca_certs_TO_BE_FILLED
     rest:
       max_concurrency: 4
     source_networker: info
     classification:
       hostname_csv_path: /apps/config/hostname_domain.csv
-      allowed_domains: [core, chnl, info, ifrs]
+      allowed_domains: [core, chnl, info]
       unmapped_domain: unmapped
-
-  - name: networker_ifrs
-    type: Networker
-    protocol: rest
-    enabled: true
-    schedule:
-      fast:
-        interval_minutes: 5
-        minute_offset: 3
-        second: 0
-      slow:
-        interval_minutes: 60
-        minute_offset: 3
-        second: 30
-    base_url: networker_ifrs_base_url_TO_BE_FILLED
-    method: GET
-    token: networker_ifrs_token_TO_BE_FILLED
-    username: networker_ifrs_username_TO_BE_FILLED
-    password: networker_ifrs_password_TO_BE_FILLED
-    verify_tls: true
-    rest:
-      max_concurrency: 4
-    source_networker: ifrs
-    classification:
-      hostname_csv_path: /apps/config/hostname_domain.csv
-      allowed_domains: [core, chnl, info, ifrs]
-      unmapped_domain: unmapped
+# IFRS is omitted until its NetWorker master supports the REST API.

@@ -26,15 +26,15 @@ data:
           fast: {interval_minutes: 5, minute_offset: 3, second: 0}
           slow: {interval_minutes: 60, minute_offset: 3, second: 30}
         base_url: networker_core_base_url_TO_BE_FILLED
-        token_file: /apps/secrets/networker/core/token
         username_file: /apps/secrets/networker/core/username
         password_file: /apps/secrets/networker/core/password
         verify_tls: true
+        ca_certs: /apps/secrets/networker/core/ca.crt
         rest: {max_concurrency: 4}
         source_networker: core
         classification: &networker_classification
           hostname_csv_path: /apps/config/hostname_domain.csv
-          allowed_domains: [core, chnl, info, ifrs]
+          allowed_domains: [core, chnl, info]
           unmapped_domain: unmapped
       - name: networker_chnl
         type: Networker
@@ -44,10 +44,10 @@ data:
           fast: {interval_minutes: 5, minute_offset: 3, second: 0}
           slow: {interval_minutes: 60, minute_offset: 3, second: 30}
         base_url: networker_chnl_base_url_TO_BE_FILLED
-        token_file: /apps/secrets/networker/chnl/token
         username_file: /apps/secrets/networker/chnl/username
         password_file: /apps/secrets/networker/chnl/password
         verify_tls: true
+        ca_certs: /apps/secrets/networker/chnl/ca.crt
         rest: {max_concurrency: 4}
         source_networker: chnl
         classification: *networker_classification
@@ -59,27 +59,12 @@ data:
           fast: {interval_minutes: 5, minute_offset: 3, second: 0}
           slow: {interval_minutes: 60, minute_offset: 3, second: 30}
         base_url: networker_info_base_url_TO_BE_FILLED
-        token_file: /apps/secrets/networker/info/token
         username_file: /apps/secrets/networker/info/username
         password_file: /apps/secrets/networker/info/password
         verify_tls: true
+        ca_certs: /apps/secrets/networker/info/ca.crt
         rest: {max_concurrency: 4}
         source_networker: info
-        classification: *networker_classification
-      - name: networker_ifrs
-        type: Networker
-        protocol: rest
-        enabled: true
-        schedule:
-          fast: {interval_minutes: 5, minute_offset: 3, second: 0}
-          slow: {interval_minutes: 60, minute_offset: 3, second: 30}
-        base_url: networker_ifrs_base_url_TO_BE_FILLED
-        token_file: /apps/secrets/networker/ifrs/token
-        username_file: /apps/secrets/networker/ifrs/username
-        password_file: /apps/secrets/networker/ifrs/password
-        verify_tls: true
-        rest: {max_concurrency: 4}
-        source_networker: ifrs
         classification: *networker_classification
   hostname_domain.csv: |
     hostname,security_domain
@@ -150,18 +135,15 @@ spec:
               - {key: elasticsearch-username, path: elasticsearch/username}
               - {key: elasticsearch-password, path: elasticsearch/password}
               - {key: elasticsearch-ca-crt, path: elasticsearch/ca.crt}
-              - {key: networker-core-token, path: networker/core/token}
+              - {key: networker-core-ca-crt, path: networker/core/ca.crt}
               - {key: networker-core-username, path: networker/core/username}
               - {key: networker-core-password, path: networker/core/password}
-              - {key: networker-chnl-token, path: networker/chnl/token}
+              - {key: networker-chnl-ca-crt, path: networker/chnl/ca.crt}
               - {key: networker-chnl-username, path: networker/chnl/username}
               - {key: networker-chnl-password, path: networker/chnl/password}
-              - {key: networker-info-token, path: networker/info/token}
+              - {key: networker-info-ca-crt, path: networker/info/ca.crt}
               - {key: networker-info-username, path: networker/info/username}
               - {key: networker-info-password, path: networker/info/password}
-              - {key: networker-ifrs-token, path: networker/ifrs/token}
-              - {key: networker-ifrs-username, path: networker/ifrs/username}
-              - {key: networker-ifrs-password, path: networker/ifrs/password}
 ---
 apiVersion: v1
 kind: Service

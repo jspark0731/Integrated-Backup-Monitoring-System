@@ -14,7 +14,6 @@ SITE_ALIASES = {
     "core": "CORE",
     "chnl": "CHNL",
     "info": "INFO",
-    "ifrs": "IFRS",
 }
 
 
@@ -179,14 +178,14 @@ class ElasticsearchWriter:
             source = str(summary["source_networker"]).strip().lower()
         else:
             source = _site_segment(result.collector).lower()
-        return source if source in {"core", "chnl", "info", "ifrs"} else "unknown"
+        return source if source in {"core", "chnl", "info"} else "unknown"
 
     @staticmethod
     def _security_domain(document: dict) -> str:
         payload = document.get("payload")
         domain = payload.get("security_domain") if isinstance(payload, dict) else None
         normalized = str(domain or "unmapped").strip().lower()
-        return normalized if normalized in {"core", "chnl", "info", "ifrs"} else "unmapped"
+        return normalized if normalized in {"core", "chnl", "info"} else "unmapped"
 
     @staticmethod
     def _networker_entity_segment(document: dict) -> str:

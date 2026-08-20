@@ -17,7 +17,7 @@ class HostnameClassifier:
         self,
         mapping: dict[str, str],
         *,
-        allowed_domains: tuple[str, ...] = ("core", "chnl", "info", "ifrs"),
+        allowed_domains: tuple[str, ...] = ("core", "chnl", "info"),
         unmapped_domain: str = "unmapped",
     ) -> None:
         self.allowed_domains = tuple(domain.strip().lower() for domain in allowed_domains)
@@ -52,7 +52,7 @@ class HostnameClassifier:
         cls,
         path: Path,
         *,
-        allowed_domains: tuple[str, ...] = ("core", "chnl", "info", "ifrs"),
+        allowed_domains: tuple[str, ...] = ("core", "chnl", "info"),
         unmapped_domain: str = "unmapped",
     ) -> "HostnameClassifier":
         with path.open("r", encoding="utf-8-sig", newline="") as fp:

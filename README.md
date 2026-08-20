@@ -22,7 +22,7 @@ Kubernetes에서는 solution별로 다음 5개 Deployment를 사용합니다.
 - `backup-dashboard-collector-networker`
 - `backup-dashboard-collector-zfs`
 
-NetWorker의 CORE, CHNL, INFO, IFRS Collector는 NetWorker Deployment 하나에서
+NetWorker의 CORE, CHNL, INFO Collector는 NetWorker Deployment 하나에서
 독립적인 asyncio scheduler task로 실행됩니다. 한 Collector의 실패는 다른
 Collector task를 종료하지 않습니다.
 

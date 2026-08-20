@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
@@ -15,10 +16,12 @@ class ReusableRestClient:
         self,
         *,
         verify_tls: bool,
+        ca_certs: str | None = None,
         timeout_seconds: float,
         max_concurrency: int,
     ) -> None:
         self._verify_tls = verify_tls
+        self._ca_certs = ca_certs
         self._timeout_seconds = timeout_seconds
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._client: httpx.AsyncClient | None = None
@@ -26,8 +29,11 @@ class ReusableRestClient:
     @property
     def client(self) -> httpx.AsyncClient:
         if self._client is None:
+            verify: bool | ssl.SSLContext = self._verify_tls
+            if self._verify_tls and self._ca_certs:
+                verify = ssl.create_default_context(cafile=self._ca_certs)
             self._client = httpx.AsyncClient(
-                verify=self._verify_tls,
+                verify=verify,
                 timeout=self._timeout_seconds,
             )
         return self._client

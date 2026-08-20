@@ -86,6 +86,7 @@ class CollectorConfig:
     username: str | None = None
     password: str | None = None
     verify_tls: bool = True
+    ca_certs: str | None = None
     rest_max_concurrency: int = 4
     commands: dict[str, str] = field(default_factory=dict)
     ssh_key_path: str | None = None
@@ -97,7 +98,7 @@ class CollectorConfig:
     command_timeout: int = 30
     source_networker: str | None = None
     hostname_csv_path: str | None = None
-    allowed_security_domains: tuple[str, ...] = ("core", "chnl", "info", "ifrs")
+    allowed_security_domains: tuple[str, ...] = ("core", "chnl", "info")
     unmapped_security_domain: str = "unmapped"
 
     @property
@@ -168,10 +169,14 @@ class CollectorConfig:
                 required["endpoints"] = self.endpoints
             required["source_networker"] = self.source_networker
             required["hostname_csv_path"] = self.hostname_csv_path
-            if self.source_networker and self.source_networker.lower() not in {"core", "chnl", "info", "ifrs"}:
+            required["username"] = self.username
+            required["password"] = self.password
+            if self.source_networker and self.source_networker.lower() not in {"core", "chnl", "info"}:
                 return f"unsupported source_networker: {self.source_networker}"
             if self.hostname_csv_path and not Path(self.hostname_csv_path).is_file():
                 return f"hostname classification CSV does not exist: {self.hostname_csv_path}"
+            if self.verify_tls and self.ca_certs and not Path(self.ca_certs).is_file():
+                return f"REST CA certificate does not exist: {self.ca_certs}"
         elif self.type == "ZFS":
             if self.endpoints:
                 required["endpoints"] = self.endpoints
@@ -286,6 +291,7 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         username=_optional_secret(raw, "username"),
         password=_optional_secret(raw, "password"),
         verify_tls=bool(raw.get("verify_tls", True)),
+        ca_certs=_optional(raw.get("ca_certs")),
         rest_max_concurrency=int((raw.get("rest") or {}).get("max_concurrency", 4)),
         commands=dict(raw.get("commands", {})),
         ssh_key_path=_optional(raw.get("ssh_key_path")),
@@ -301,7 +307,7 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
             str(value).strip().lower()
             for value in (raw.get("classification") or {}).get(
                 "allowed_domains",
-                ("core", "chnl", "info", "ifrs"),
+                ("core", "chnl", "info"),
             )
         ),
         unmapped_security_domain=str(

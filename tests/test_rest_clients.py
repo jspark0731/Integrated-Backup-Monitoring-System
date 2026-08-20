@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from apps.clients.i6000_rest_client import I6000RestClient
+from apps.clients.networker_rest_client import NetworkerRestClient
 from apps.clients.rest_client import ERRORS_KEY, ReusableRestClient
 from apps.core.config import CollectorConfig
 
@@ -108,6 +109,38 @@ async def test_i6000_reuses_http_client_and_filters_collection_class() -> None:
     assert requested_paths.count(("POST", "/aml/users/login")) == 2
     assert requested_paths.count(("DELETE", "/aml/users/login")) == 2
     assert http_client.is_closed
+
+
+@pytest.mark.asyncio
+async def test_networker_uses_basic_auth_without_bearer_token() -> None:
+    authorization_headers = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        authorization_headers.append(request.headers.get("Authorization"))
+        return httpx.Response(200, json={"items": []})
+
+    client = NetworkerRestClient(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            base_url="https://networker.example.com:9090",
+            username="rest-user",
+            password="secret",
+            source_networker="core",
+            verify_tls=False,
+        )
+    )
+    client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    payloads = await client.fetch_payloads("fast")
+    await client.close()
+
+    assert set(payloads) == {"jobs", "backups"}
+    assert authorization_headers
+    assert all(value and value.startswith("Basic ") for value in authorization_headers)
+    assert not any(value and value.startswith("Bearer ") for value in authorization_headers)
 
 
 async def _get_json(client: httpx.AsyncClient, endpoint: str) -> dict:

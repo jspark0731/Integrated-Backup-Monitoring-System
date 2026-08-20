@@ -26,15 +26,6 @@
       }
     ]
   },
-  "grafana_networker_ifrs": {
-    "cluster": [],
-    "indices": [
-      {
-        "names": ["NW-IFRS-*"],
-        "privileges": ["read", "view_index_metadata"]
-      }
-    ]
-  },
   "grafana_backup_operations": {
     "cluster": [],
     "indices": [

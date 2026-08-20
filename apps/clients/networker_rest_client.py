@@ -25,6 +25,7 @@ class NetworkerRestClient:
         self.config = config
         self._rest = ReusableRestClient(
             verify_tls=config.verify_tls,
+            ca_certs=config.ca_certs,
             timeout_seconds=30,
             max_concurrency=config.rest_max_concurrency,
         )
@@ -34,12 +35,7 @@ class NetworkerRestClient:
         collection_class: CollectionClass | None = None,
     ) -> dict[str, Any]:
         headers = {"Accept": "application/json"}
-        auth = None
-
-        if self.config.token:
-            headers["Authorization"] = f"Bearer {self.config.token}"
-        if self.config.username and self.config.password:
-            auth = (self.config.username, self.config.password)
+        auth = (str(self.config.username), str(self.config.password))
 
         endpoints = _endpoints_for_class(
             self.config.endpoints or DEFAULT_ENDPOINTS,

@@ -81,7 +81,7 @@ DD / DXi / i6000 / NetWorker / ZFS
 | Current | `NW-OPS-CURRENT-{SOURCE}` | `NW-OPS-CURRENT-CHNL` | 백업 운영자 |
 | Derived | `NW-{DOMAIN}-{ENTITY}-{YYYY-MM}` | `NW-CORE-JOB-2026-07` | 해당 업무영역 운영자 |
 
-`SOURCE`는 호출한 NetWorker 서버의 `core/chnl/info/ifrs`이고, `DOMAIN`은
+`SOURCE`는 호출한 NetWorker 서버의 `core/chnl/info`이고, `DOMAIN`은
 hostname CSV로 판정한 백업 대상 서버의 업무영역이다. 예를 들어 CHNL
 NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 문서의
 `source_networker`는 `chnl`이다. 미분류 문서는 `NW-UNMAPPED-{ENTITY}-*`에
@@ -557,7 +557,6 @@ Grafana에서 대상별 인덱스 패턴을 datasource에 설정한다.
 | NetWorker 기간계 | `NW-CORE-*` | `@timestamp` |
 | NetWorker 채널계 | `NW-CHNL-*` | `@timestamp` |
 | NetWorker 정보계 | `NW-INFO-*` | `@timestamp` |
-| NetWorker 대외계 | `NW-IFRS-*` | `@timestamp` |
 | NetWorker 백업 운영 | `NW-OPS-*`, `NW-UNMAPPED-*` | `@timestamp` |
 | ZFS | `ZFS-*` | `@timestamp` |
 
