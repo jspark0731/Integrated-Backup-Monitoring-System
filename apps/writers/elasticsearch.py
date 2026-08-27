@@ -103,11 +103,12 @@ class ElasticsearchWriter:
         for document in build_derived_documents(raw_document):
             domain = self._security_domain(document)
             document_type = self._networker_entity_segment(document)
+            document_month = self._networker_document_month(document, month)
             actions.append(
                 {
                     "_op_type": "index",
                     "_index": self._normalize_index_name(
-                        f"NW-{domain.upper()}-{document_type}-{month}"
+                        f"NW-{domain.upper()}-{document_type}-{document_month}"
                     ),
                     "_id": document["derived_id"],
                     "_source": document,
@@ -192,6 +193,19 @@ class ElasticsearchWriter:
         document_type = str(document.get("document_type") or "unknown").strip().lower()
         aliases = {"monthly-report": "MONTHLY"}
         return aliases.get(document_type, document_type.upper())
+
+    @staticmethod
+    def _networker_document_month(document: dict, fallback: str) -> str:
+        value = str(document.get("index_month") or "")
+        if (
+            len(value) == 7
+            and value[4] == "-"
+            and value[:4].isdigit()
+            and value[5:].isdigit()
+            and 1 <= int(value[5:]) <= 12
+        ):
+            return value
+        return fallback
 
     def _raw_document_id(self, result: CollectionResult) -> str:
         timestamp = result.collected_at.strftime("%Y%m%dT%H%M%S.%fZ")

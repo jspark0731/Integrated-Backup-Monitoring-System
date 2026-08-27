@@ -1,0 +1,52 @@
+{
+  "index_patterns": ["nw-*-job-run-*"],
+  "priority": 250,
+  "version": 1,
+  "_meta": {
+    "description": "NetWorker job-run analytics documents"
+  },
+  "template": {
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "observed_at": {"type": "date"},
+        "collector": {"type": "keyword"},
+        "device_name": {"type": "keyword"},
+        "target_type": {"type": "keyword"},
+        "solution": {"type": "keyword"},
+        "document_family": {"type": "keyword"},
+        "document_type": {"type": "keyword"},
+        "processing_mode": {"type": "keyword"},
+        "source_raw_id": {"type": "keyword"},
+        "record_id": {"type": "keyword"},
+        "derived_id": {"type": "keyword"},
+        "source_networker": {"type": "keyword"},
+        "security_domain": {"type": "keyword"},
+        "index_month": {"type": "keyword"},
+        "payload": {
+          "properties": {
+            "job_id": {"type": "keyword"},
+            "name": {"type": "keyword"},
+            "type": {"type": "keyword"},
+            "state": {"type": "keyword"},
+            "status": {"type": "keyword"},
+            "outcome": {"type": "keyword"},
+            "exit_code": {"type": "integer"},
+            "policy_name": {"type": "keyword"},
+            "workflow_name": {"type": "keyword"},
+            "client_name": {"type": "keyword"},
+            "run_on_host": {"type": "keyword"},
+            "start_time": {"type": "date"},
+            "end_time": {"type": "date"},
+            "event_time": {"type": "date"},
+            "job_run_month": {"type": "keyword"},
+            "duration_seconds": {"type": "long"},
+            "root_parent_job_id": {"type": "keyword"},
+            "parent_job_id": {"type": "keyword"}
+          }
+        }
+      }
+    }
+  }
+}

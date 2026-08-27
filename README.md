@@ -82,10 +82,18 @@ Prometheus는 장비 상태, 용량, job 수와 같은 즉시 갱신되는 숫�
 | NetWorker raw | `NW-OPS-RAW-{SOURCE}-YYYY-MM` |
 | NetWorker current | `NW-OPS-CURRENT-{SOURCE}` |
 | NetWorker derived | `NW-{DOMAIN}-{ENTITY}-YYYY-MM` |
+| NetWorker job-run analytics | `NW-{DOMAIN}-JOB-RUN-{RUN-YYYY-MM}` |
 
 CURRENT 문서는 `{collector}:current` ID로 overwrite됩니다. slow inventory
 수집은 RAW와 derived 데이터만 기록하고 CURRENT 운영 상태를 덮어쓰지
 않습니다. 기존 일자별 인덱스는 자동 reindex하거나 삭제하지 않습니다.
+
+NetWorker job은 기존 `job` derived 문서와 함께 분석용 `job-run` 문서도
+기록합니다. `job-run.@timestamp`는 실제 job 이벤트 시각이고 `observed_at`은
+수집 시각입니다. `duration_seconds`는 시작/종료 시각이 모두 유효할 때만
+생성됩니다. 운영 전
+`config/elasticsearch_networker_job_run_index_template.example.json`의 index
+template을 Elasticsearch에 적용해야 합니다.
 
 상세 문서 모델은 [collection_data_schema.md](docs/collection_data_schema.md)를
 참조하세요.

@@ -254,6 +254,90 @@ def test_networker_slow_collection_keeps_derived_data_without_current_write() ->
     ]
 
 
+def test_networker_job_run_uses_event_time_duration_and_stable_id() -> None:
+    raw_document = {
+        "_id": "networker_core:raw:20260701T001500.000000Z",
+        "@timestamp": "2026-07-01T00:15:00+00:00",
+        "collector": "networker_core",
+        "target_type": "Networker",
+        "solution": "networker",
+        "payload": {
+            "jobs": [
+                {
+                    "job_id": "job-42",
+                    "status": "success",
+                    "start_time": "2026-06-30T23:50:00Z",
+                    "end_time": "2026-07-01T00:10:00Z",
+                    "source_networker": "core",
+                    "security_domain": "core",
+                }
+            ]
+        },
+    }
+
+    documents = build_derived_documents(raw_document)
+    job_run = next(document for document in documents if document["document_type"] == "job-run")
+
+    assert job_run["@timestamp"] == "2026-07-01T00:10:00+00:00"
+    assert job_run["observed_at"] == "2026-07-01T00:15:00+00:00"
+    assert job_run["index_month"] == "2026-06"
+    assert job_run["derived_id"] == "networker_core:job-run:job-42"
+    assert job_run["payload"]["duration_seconds"] == 1200
+    assert job_run["payload"]["outcome"] == "success"
+
+
+def test_networker_job_run_routes_by_start_month_without_changing_legacy_job() -> None:
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+    result = CollectionResult(
+        collector="networker_core",
+        target_type="Networker",
+        protocol="rest",
+        collected_at=datetime(2026, 7, 1, 0, 15, tzinfo=timezone.utc),
+        ok=True,
+        payload={
+            "summary": {"source_networker": "core"},
+            "jobs": [
+                {
+                    "job_id": "job-42",
+                    "status": "success",
+                    "start_time": 1782863400000,
+                    "end_time": 1782864600000,
+                    "source_networker": "core",
+                    "security_domain": "core",
+                }
+            ],
+        },
+    )
+
+    actions = writer._actions_for_result(result)
+    legacy_job = next(action for action in actions if action["_source"].get("document_type") == "job")
+    job_run = next(action for action in actions if action["_source"].get("document_type") == "job-run")
+
+    assert legacy_job["_index"] == "nw-core-job-2026-07"
+    assert legacy_job["_source"]["@timestamp"] == "2026-07-01T00:15:00+00:00"
+    assert job_run["_index"] == "nw-core-job-run-2026-06"
+    assert job_run["_id"] == "networker_core:job-run:job-42"
+    assert job_run["_source"]["payload"]["duration_seconds"] == 1200
+
+
+def test_networker_job_run_skips_jobs_without_stable_identity_or_event_time() -> None:
+    raw_document = {
+        "@timestamp": "2026-07-01T00:15:00+00:00",
+        "collector": "networker_core",
+        "target_type": "Networker",
+        "payload": {
+            "jobs": [
+                {"status": "success", "end_time": "2026-07-01T00:10:00Z"},
+                {"job_id": "job-43", "status": "success"},
+            ]
+        },
+    }
+
+    documents = build_derived_documents(raw_document)
+
+    assert [document["document_type"] for document in documents] == ["job", "job"]
+
+
 def test_zfs_raw_document_can_be_transformed_to_derived_documents() -> None:
     raw_document = {
         "_id": "ZFS_1:raw:20260629T000000.000000Z",

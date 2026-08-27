@@ -204,8 +204,24 @@ collector별 최신 운영 상태를 제공한다. fast 수집만 current를 갱
 |---|---|---|
 | DD / DXi | `summary` | `device_name`, `server`, `name`, collector |
 | i6000 | `summary`, `drive`, `media`, `partition`, `robot` | 장비별 `serial_number`, `barcode`, `name` |
-| NetWorker | `job`, `client`, `policy`, `workflow`, `monthly-report` | 각 엔티티 ID/이름 조합 |
+| NetWorker | `job`, `job-run`, `client`, `policy`, `workflow`, `monthly-report` | 각 엔티티 ID/이름 조합 |
 | ZFS | `summary`, `pool`, `project`, `filesystem`, `lun`, `event` | 이름, 상위 경로, 이벤트 시각/요약 조합 |
+
+`job-run`은 기존 `job`과 병행 생성되는 분석 전용 문서다. 기존 `job`의
+`@timestamp`와 ID 의미는 변경하지 않는다. `job-run`에는 다음 예외가 있다.
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `@timestamp` | `datetime` | 종료된 job은 종료 시각, 실행 중 job은 시작 시각 |
+| `observed_at` | `datetime` | collector 수집 시각 |
+| `index_month` | `string` | 중복 방지를 위한 job 시작 월 |
+| `derived_id` | `string` | `{collector}:job-run:{job_id}` |
+| `payload.outcome` | `string` | 기존 status와 병행하는 분석 결과 |
+| `payload.duration_seconds` | `integer nullable` | 종료 시각 - 시작 시각 |
+
+안정적인 중복 제거를 위해 `job_id` 또는 이벤트 시각이 없는 job에는
+`job-run` 문서를 생성하지 않는다. 전용 mapping 예시는
+`config/elasticsearch_networker_job_run_index_template.example.json`에 있다.
 
 ## 4. 대상별 Elasticsearch Payload
 

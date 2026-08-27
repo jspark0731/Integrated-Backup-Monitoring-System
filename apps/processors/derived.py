@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -28,7 +29,67 @@ def _networker_documents(raw_document: dict[str, Any], payload: dict[str, Any]) 
         ("workflow", "workflows", ("policy_name", "workflow_name")),
         ("monthly-report", "monthly_report", ("policy_name", "workflow_name", "month")),
     )
-    return _record_documents(raw_document, payload, "networker", specs)
+    legacy_documents = _record_documents(raw_document, payload, "networker", specs)
+    return legacy_documents + _networker_job_run_documents(raw_document, payload)
+
+
+def _networker_job_run_documents(
+    raw_document: dict[str, Any],
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list):
+        return []
+
+    documents = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        record = _job_run_record(job)
+        if record is None:
+            continue
+
+        job_id = _string(record.get("job_id"))
+        document = _derived_document(
+            raw_document,
+            solution="networker",
+            document_type="job-run",
+            record=record,
+            record_id=job_id,
+        )
+        document["@timestamp"] = record["event_time"]
+        document["observed_at"] = raw_document.get("@timestamp")
+        document["index_month"] = record["job_run_month"]
+        document["derived_id"] = f"{document['collector']}:job-run:{job_id}"
+        documents.append(document)
+    return documents
+
+
+def _job_run_record(job: dict[str, Any]) -> dict[str, Any] | None:
+    job_id = _string(job.get("job_id"))
+    start_time = _parse_datetime(job.get("start_time"))
+    end_time = _parse_datetime(job.get("end_time"))
+    status = _string(job.get("status")).lower() or "unknown"
+    event_time = start_time if status == "running" else end_time or start_time
+
+    # A stable ID and event time are required to avoid duplicate analytical rows.
+    if not job_id or event_time is None:
+        return None
+
+    duration_seconds = None
+    if start_time is not None and end_time is not None and end_time >= start_time:
+        duration_seconds = int((end_time - start_time).total_seconds())
+
+    run_month_source = start_time or event_time
+    return job | {
+        "job_id": job_id,
+        "start_time": _isoformat(start_time),
+        "end_time": _isoformat(end_time),
+        "event_time": _isoformat(event_time),
+        "job_run_month": run_month_source.strftime("%Y-%m"),
+        "duration_seconds": duration_seconds,
+        "outcome": status,
+    }
 
 
 def _i6000_documents(raw_document: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -163,6 +224,42 @@ def _month(timestamp: Any) -> str:
     if len(text) >= 7:
         return text[:7]
     return "unknown"
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, (int, float)):
+        try:
+            parsed = _datetime_from_epoch(float(value))
+        except (ValueError, OverflowError, OSError):
+            return None
+    else:
+        text = _string(value)
+        if not text:
+            return None
+        try:
+            parsed = _datetime_from_epoch(float(text))
+        except (ValueError, OverflowError, OSError):
+            normalized = f"{text[:-1]}+00:00" if text.endswith(("Z", "z")) else text
+            try:
+                parsed = datetime.fromisoformat(normalized)
+            except ValueError:
+                return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _datetime_from_epoch(value: float) -> datetime:
+    # NetWorker versions may return Unix seconds or milliseconds.
+    seconds = value / 1000 if abs(value) >= 100_000_000_000 else value
+    return datetime.fromtimestamp(seconds, tz=timezone.utc)
+
+
+def _isoformat(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
 
 
 def _string(value: Any) -> str:
