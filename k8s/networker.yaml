@@ -68,6 +68,9 @@ data:
         classification: *networker_classification
   hostname_domain.csv: |
     hostname,security_domain
+    networker_core_client_hostname_TO_BE_FILLED,core
+    networker_chnl_client_hostname_TO_BE_FILLED,chnl
+    networker_info_client_hostname_TO_BE_FILLED,info
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -92,6 +95,16 @@ spec:
         prometheus.io/path: /metrics
         prometheus.io/port: "8080"
     spec:
+      hostAliases:
+        - ip: networker_core_ip_TO_BE_FILLED
+          hostnames:
+            - networker_core_hostname_TO_BE_FILLED
+        - ip: networker_chnl_ip_TO_BE_FILLED
+          hostnames:
+            - networker_chnl_hostname_TO_BE_FILLED
+        - ip: networker_info_ip_TO_BE_FILLED
+          hostnames:
+            - networker_info_hostname_TO_BE_FILLED
       containers:
         - name: collector
           image: backup-dashboard-collector-networker:latest

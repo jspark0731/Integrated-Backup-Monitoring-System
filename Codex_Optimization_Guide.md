@@ -92,7 +92,6 @@ NW-OPS-CURRENT-CORE
 NW-CORE-JOB-2026-07
 NW-CHNL-CLIENT-2026-07
 NW-INFO-WORKFLOW-2026-07
-NW-IFRS-MONTHLY-2026-07
 ```
 
 단, NetWorker CURRENT Index도 가능하면 월별 생성 대신 고정 Index로 변경한다.
@@ -295,7 +294,7 @@ backup-dashboard-collector-networker
 backup-dashboard-collector-zfs
 ```
 
-NetWorker의 CORE / CHNL / INFO / IFRS를 각각 별도 Deployment로 실행하는 기존 구조는 변경한다.
+NetWorker의 CORE / CHNL / INFO를 각각 별도 Deployment로 실행하는 기존 구조는 변경한다.
 
 하나의 NetWorker Collector Pod 안에서 다음 Collector들이 각각 독립적으로 Scheduler task를 실행하도록 한다.
 
@@ -303,7 +302,6 @@ NetWorker의 CORE / CHNL / INFO / IFRS를 각각 별도 Deployment로 실행하�
 networker_core
 networker_chnl
 networker_info
-networker_ifrs
 ```
 
 현재 `CollectorScheduler`가 여러 Collector를 asyncio task로 실행할 수 있으므로 해당 구조를 활용한다.
@@ -428,7 +426,7 @@ NetWorker, i6000 등 payload가 상대적으로 큰 Collector는 메모리 limit
 4. REST concurrency limit 테스트
 5. endpoint partial failure 테스트
 6. HTTP Client reuse 테스트
-7. NetWorker 4 Collector가 동일 Scheduler 내에서 독립 실행되는 테스트
+7. NetWorker 3 Collector가 동일 Scheduler 내에서 독립 실행되는 테스트
 8. Collector exception 이후 다음 schedule에 다시 실행되는 테스트
 9. 기존 security domain classification 테스트 유지
 10. 기존 Prometheus metric 테스트 유지
