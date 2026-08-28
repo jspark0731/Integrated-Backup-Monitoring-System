@@ -28,10 +28,14 @@ def parse_networker_rest_payload(
     summary = _build_summary(server_name, jobs, clients, policies, workflows, backups)
     summary["source_networker"] = source
     summary["client_count_by_domain"] = dict(Counter(client["security_domain"] for client in clients))
+    query_window = payloads.get("_query_window")
+    if isinstance(query_window, dict):
+        summary["query_window"] = dict(query_window)
 
     return {
         "summary": summary,
         "jobs": jobs,
+        "backups": backups,
         "clients": clients,
         "policies": policies,
         "workflows": workflows,
@@ -40,7 +44,7 @@ def parse_networker_rest_payload(
 
 
 def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:
-    state = _string(item.get("state"))
+    state = _string(item.get("state")) or _string(item.get("completionStatus"))
     exit_code = _int(item.get("exitCode"))
     status = _job_status(state, exit_code)
     policy = _policy_from_text(_string(item.get("policyName")) or _string(item.get("policy")) or _string(item.get("name")))
@@ -48,7 +52,7 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
     return {
         "server": server,
         "source_networker": source_networker,
-        "job_id": item.get("id"),
+        "job_id": item.get("id") or item.get("jobId"),
         "name": _string(item.get("name")),
         "type": _string(item.get("type")),
         "state": state,

@@ -62,7 +62,11 @@ def test_group_example_configs_load_expected_collectors() -> None:
 
         assert len(config.collectors) == count
         assert {collector.type for collector in config.collectors} == collector_types
-        assert all(collector.effective_schedule.interval_minutes == 5 for collector in config.collectors)
+        expected_interval = 10 if group == "networker" else 5
+        assert all(
+            collector.effective_schedule.interval_minutes == expected_interval
+            for collector in config.collectors
+        )
         assert all(collector.skip_reason for collector in config.collectors)
 
 
@@ -221,6 +225,54 @@ collectors:
     collector = load_config(config_path).collectors[0]
 
     assert collector.skip_reason == "invalid rest.max_concurrency: 0"
+
+
+def test_networker_server_protection_settings_load_and_validate(tmp_path: Path) -> None:
+    classification = tmp_path / "hostname_domain.csv"
+    classification.write_text("hostname,security_domain\n", encoding="utf-8")
+    config_path = tmp_path / "collector.yaml"
+    config_path.write_text(
+        f"""
+collectors:
+  - name: networker_core
+    type: Networker
+    protocol: rest
+    enabled: true
+    base_url: https://networker.example.com:9090
+    username: rest-user
+    password: secret
+    source_networker: core
+    classification:
+      hostname_csv_path: {classification}
+    rest:
+      max_concurrency: 1
+      request_spacing_seconds: 30
+      query_window_minutes: 20
+      active_jobs_query: completionStatus:Running
+      field_filter: true
+""",
+        encoding="utf-8",
+    )
+
+    collector = load_config(config_path).collectors[0]
+
+    assert collector.rest_max_concurrency == 1
+    assert collector.rest_request_spacing_seconds == 30
+    assert collector.networker_query_window_minutes == 20
+    assert collector.networker_active_jobs_query == "completionStatus:Running"
+    assert collector.networker_field_filter
+    assert collector.skip_reason is None
+
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            "query_window_minutes: 20",
+            "query_window_minutes: 0",
+        ),
+        encoding="utf-8",
+    )
+
+    collector = load_config(config_path).collectors[0]
+    assert collector.skip_reason == "invalid rest.query_window_minutes: 0"
 
 
 def test_networker_requires_basic_auth_and_rejects_ifrs(tmp_path: Path) -> None:

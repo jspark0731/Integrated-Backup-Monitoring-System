@@ -51,6 +51,7 @@ class NetworkerRestCollector(BaseCollector):
         return {
             "summary": parsed["summary"],
             "jobs": parsed["jobs"],
+            "backups": parsed["backups"],
             "clients": parsed["clients"],
             "policies": parsed["policies"],
             "workflows": parsed["workflows"],

@@ -31,10 +31,10 @@ Collector task를 종료하지 않습니다.
 DXi와 DD는 기존 단일 5분 schedule을 사용합니다. REST Collector는 상태성
 데이터와 inventory 데이터를 분리합니다.
 
-| Collector | Fast, 기본 5분 | Slow, 기본 60분 |
+| Collector | Fast | Slow |
 |---|---|---|
 | i6000 | library/drive/RAS 상태, RAS ticket, slot 사용량, reachability | media, tower, I/E station, physical library inventory |
-| NetWorker | job, backup 실행 및 상태 | client, policy, workflow, protection group inventory |
+| NetWorker | 최근 20분 job/backup, 기본 10분 | client, policy/workflow inventory, 기본 360분 |
 | ZFS | API, pool, capacity, alert/fault | project, filesystem, LUN inventory |
 
 ```yaml
@@ -62,6 +62,19 @@ rest:
   max_concurrency: 4
 ```
 
+NetWorker는 마스터 서버의 전역 REST 조회 부하를 제한하기 위해 예외적으로
+endpoint를 순차 호출한다. 완료 job과 backup은 각각 `endTime`, `saveTime`의
+최근 시간 구간만 조회하고 실행 중 job은 별도 필터로 조회한다.
+
+```yaml
+rest:
+  max_concurrency: 1
+  request_spacing_seconds: 30
+  query_window_minutes: 20
+  active_jobs_query: completionStatus:Running
+  field_filter: true
+```
+
 일부 endpoint만 실패하면 성공 응답은 계속 처리하고 `collection_status:
 partial` 및 `endpoint_errors`를 payload에 기록합니다.
 
@@ -83,6 +96,7 @@ Prometheus는 장비 상태, 용량, job 수와 같은 즉시 갱신되는 숫�
 | NetWorker current | `NW-OPS-CURRENT-{SOURCE}` |
 | NetWorker derived | `NW-{DOMAIN}-{ENTITY}-YYYY-MM` |
 | NetWorker job-run analytics | `NW-{DOMAIN}-JOB-RUN-{RUN-YYYY-MM}` |
+| NetWorker backup events | `NW-{DOMAIN}-BACKUP-{SAVE-YYYY-MM}` |
 
 CURRENT 문서는 `{collector}:current` ID로 overwrite됩니다. slow inventory
 수집은 RAW와 derived 데이터만 기록하고 CURRENT 운영 상태를 덮어쓰지
@@ -94,6 +108,13 @@ NetWorker job은 기존 `job` derived 문서와 함께 분석용 `job-run` 문�
 생성됩니다. 운영 전
 `config/elasticsearch_networker_job_run_index_template.example.json`의 index
 template을 Elasticsearch에 적용해야 합니다.
+
+NetWorker backup은 `{collector}:backup:{backup_id}` ID로 저장하므로 겹치는
+시간 구간을 다시 조회해도 같은 이벤트가 중복 생성되지 않는다. 월간 용량과
+건수는 부분 수집 결과의 `monthly_report`가 아니라 backup 이벤트 문서를
+Elasticsearch에서 집계한다.
+운영 전 `config/elasticsearch_networker_backup_index_template.example.json`도
+Elasticsearch index template으로 적용해야 한다.
 
 상세 문서 모델은 [collection_data_schema.md](docs/collection_data_schema.md)를
 참조하세요.

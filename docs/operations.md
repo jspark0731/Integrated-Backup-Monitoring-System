@@ -90,6 +90,30 @@ kubectl create secret generic backup-dashboard-collector-networker-secrets \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
+## NetWorker 서버 부하 보호
+
+운영 manifest는 CORE, CHNL, INFO fast 수집을 매 10분의 3분, 6분, 9분으로
+분산한다. 완료 job은 `endTime`, backup은 `saveTime` 기준 최근 20분만 조회하며
+실행 중 job은 `completionStatus:Running` 필터로 별도 조회한다. 각 요청은 한
+서버에서 순차 실행되고 요청 사이에 30초를 둔다.
+
+```yaml
+rest:
+  max_concurrency: 1
+  request_spacing_seconds: 30
+  query_window_minutes: 20
+  active_jobs_query: completionStatus:Running
+  field_filter: true
+```
+
+slow client/policy inventory는 6시간 간격이다. `active_jobs_query`가 특정
+NetWorker 버전에서 지원되지 않으면 실제 `/global/jobs` 응답의 필터 가능
+필드를 확인한 뒤 값을 변경한다. 해당 요청만 실패해도 완료 job과 backup
+응답은 `collection_status: partial`로 계속 처리된다.
+
+시간 구간을 겹쳐 조회하므로 월간 집계는 raw의 `monthly_report`가 아니라
+`NW-{DOMAIN}-BACKUP-YYYY-MM`의 안정적인 backup 이벤트 문서를 사용한다.
+
 ## 기본 리소스
 
 | Collector | CPU request | Memory request | CPU limit | Memory limit |

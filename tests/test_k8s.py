@@ -29,6 +29,21 @@ def test_networker_manifest_has_one_workload_with_three_basic_auth_collectors() 
     assert all(collector["username_file"] for collector in collectors)
     assert all(collector["password_file"] for collector in collectors)
     assert all(collector["ca_certs"] for collector in collectors)
+    assert [collector["schedule"]["fast"]["interval_minutes"] for collector in collectors] == [
+        10,
+        10,
+        10,
+    ]
+    assert [collector["schedule"]["fast"]["minute_offset"] for collector in collectors] == [
+        3,
+        6,
+        9,
+    ]
+    assert all(collector["schedule"]["slow"]["interval_minutes"] == 360 for collector in collectors)
+    assert all(collector["rest"]["max_concurrency"] == 1 for collector in collectors)
+    assert all(collector["rest"]["request_spacing_seconds"] == 30 for collector in collectors)
+    assert all(collector["rest"]["query_window_minutes"] == 20 for collector in collectors)
+    assert all(collector["rest"]["field_filter"] for collector in collectors)
 
     secret_items = resources["Deployment"]["spec"]["template"]["spec"]["volumes"][1][
         "secret"

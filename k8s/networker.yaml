@@ -23,14 +23,19 @@ data:
         protocol: rest
         enabled: true
         schedule:
-          fast: {interval_minutes: 5, minute_offset: 3, second: 0}
-          slow: {interval_minutes: 60, minute_offset: 3, second: 30}
+          fast: {interval_minutes: 10, minute_offset: 3, second: 0}
+          slow: {interval_minutes: 360, minute_offset: 4, second: 0}
         base_url: networker_core_base_url_TO_BE_FILLED
         username_file: /apps/secrets/networker/core/username
         password_file: /apps/secrets/networker/core/password
         verify_tls: true
         ca_certs: /apps/secrets/networker/core/ca.crt
-        rest: {max_concurrency: 4}
+        rest: &networker_rest
+          max_concurrency: 1
+          request_spacing_seconds: 30
+          query_window_minutes: 20
+          active_jobs_query: completionStatus:Running
+          field_filter: true
         source_networker: core
         classification: &networker_classification
           hostname_csv_path: /apps/config/hostname_domain.csv
@@ -41,14 +46,14 @@ data:
         protocol: rest
         enabled: true
         schedule:
-          fast: {interval_minutes: 5, minute_offset: 3, second: 0}
-          slow: {interval_minutes: 60, minute_offset: 3, second: 30}
+          fast: {interval_minutes: 10, minute_offset: 6, second: 20}
+          slow: {interval_minutes: 360, minute_offset: 7, second: 20}
         base_url: networker_chnl_base_url_TO_BE_FILLED
         username_file: /apps/secrets/networker/chnl/username
         password_file: /apps/secrets/networker/chnl/password
         verify_tls: true
         ca_certs: /apps/secrets/networker/chnl/ca.crt
-        rest: {max_concurrency: 4}
+        rest: *networker_rest
         source_networker: chnl
         classification: *networker_classification
       - name: networker_info
@@ -56,14 +61,14 @@ data:
         protocol: rest
         enabled: true
         schedule:
-          fast: {interval_minutes: 5, minute_offset: 3, second: 0}
-          slow: {interval_minutes: 60, minute_offset: 3, second: 30}
+          fast: {interval_minutes: 10, minute_offset: 9, second: 40}
+          slow: {interval_minutes: 360, minute_offset: 10, second: 40}
         base_url: networker_info_base_url_TO_BE_FILLED
         username_file: /apps/secrets/networker/info/username
         password_file: /apps/secrets/networker/info/password
         verify_tls: true
         ca_certs: /apps/secrets/networker/info/ca.crt
-        rest: {max_concurrency: 4}
+        rest: *networker_rest
         source_networker: info
         classification: *networker_classification
   hostname_domain.csv: |

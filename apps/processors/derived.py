@@ -34,10 +34,45 @@ def _iter_networker_documents(
         ("client", "clients", ("client_name", "client_id")),
         ("policy", "policies", ("policy_name",)),
         ("workflow", "workflows", ("policy_name", "workflow_name")),
-        ("monthly-report", "monthly_report", ("policy_name", "workflow_name", "month")),
     )
     yield from _iter_record_documents(raw_document, payload, "networker", specs)
+    yield from _iter_networker_backup_documents(raw_document, payload)
     yield from _iter_networker_job_run_documents(raw_document, payload)
+
+
+def _iter_networker_backup_documents(
+    raw_document: dict[str, Any],
+    payload: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
+    backups = payload.get("backups")
+    if not isinstance(backups, list):
+        return
+
+    for backup in backups:
+        if not isinstance(backup, dict):
+            continue
+        backup_id = _string(backup.get("backup_id"))
+        event_time = _parse_datetime(backup.get("save_time")) or _parse_datetime(
+            backup.get("completion_time")
+        )
+        if not backup_id or event_time is None:
+            continue
+        record = backup | {
+            "event_time": _isoformat(event_time),
+            "backup_month": event_time.strftime("%Y-%m"),
+        }
+        document = _derived_document(
+            raw_document,
+            solution="networker",
+            document_type="backup",
+            record=record,
+            record_id=backup_id,
+        )
+        document["@timestamp"] = record["event_time"]
+        document["observed_at"] = raw_document.get("@timestamp")
+        document["index_month"] = record["backup_month"]
+        document["derived_id"] = f"{document['collector']}:backup:{backup_id}"
+        yield document
 
 
 def _iter_networker_job_run_documents(

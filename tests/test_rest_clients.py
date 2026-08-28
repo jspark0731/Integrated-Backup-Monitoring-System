@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -114,10 +115,99 @@ async def test_i6000_reuses_http_client_and_filters_collection_class() -> None:
 @pytest.mark.asyncio
 async def test_networker_uses_basic_auth_without_bearer_token() -> None:
     authorization_headers = []
+    requests = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         authorization_headers.append(request.headers.get("Authorization"))
-        return httpx.Response(200, json={"items": []})
+        requests.append((request.url.path, dict(request.url.params)))
+        if request.url.path.endswith("/jobs"):
+            job_id = "active-1" if request.url.params["q"] == "completionStatus:Running" else "done-1"
+            return httpx.Response(200, json={"jobs": [{"id": job_id}]})
+        return httpx.Response(200, json={"backups": []})
+
+    client = NetworkerRestClient(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            base_url="https://networker.example.com:9090",
+            username="rest-user",
+            password="secret",
+            source_networker="core",
+            verify_tls=False,
+        )
+    )
+    client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    payloads = await client.fetch_payloads(
+        "fast",
+        now=datetime(2026, 8, 28, 12, 30, tzinfo=timezone.utc),
+    )
+    await client.close()
+
+    assert set(payloads) == {"jobs", "backups", "_query_window"}
+    assert [item["id"] for item in payloads["jobs"]["jobs"]] == ["done-1", "active-1"]
+    assert [path for path, _ in requests] == [
+        "/nwrestapi/v3/global/jobs",
+        "/nwrestapi/v3/global/jobs",
+        "/nwrestapi/v3/global/backups",
+    ]
+    assert requests[0][1]["q"] == (
+        'endTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
+    )
+    assert requests[1][1]["q"] == "completionStatus:Running"
+    assert requests[2][1]["q"] == (
+        'saveTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
+    )
+    assert all("fl" in params for _, params in requests)
+    assert authorization_headers
+    assert all(value and value.startswith("Basic ") for value in authorization_headers)
+    assert not any(value and value.startswith("Bearer ") for value in authorization_headers)
+
+
+@pytest.mark.asyncio
+async def test_networker_spaces_sequential_requests(monkeypatch) -> None:
+    sleeps = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        key = "jobs" if request.url.path.endswith("/jobs") else "backups"
+        return httpx.Response(200, json={key: []})
+
+    monkeypatch.setattr("apps.clients.networker_rest_client.asyncio.sleep", fake_sleep)
+    client = NetworkerRestClient(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            base_url="https://networker.example.com:9090",
+            username="rest-user",
+            password="secret",
+            source_networker="core",
+            verify_tls=False,
+            rest_request_spacing_seconds=30,
+        )
+    )
+    client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    await client.fetch_payloads("fast")
+    await client.close()
+
+    assert sleeps == [30, 30]
+
+
+@pytest.mark.asyncio
+async def test_networker_keeps_windowed_data_when_active_job_query_fails() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/jobs"):
+            if request.url.params["q"] == "completionStatus:Running":
+                return httpx.Response(503, json={"message": "busy"})
+            return httpx.Response(200, json={"jobs": [{"id": "done-1"}]})
+        return httpx.Response(200, json={"backups": [{"id": "backup-1"}]})
 
     client = NetworkerRestClient(
         CollectorConfig(
@@ -137,10 +227,9 @@ async def test_networker_uses_basic_auth_without_bearer_token() -> None:
     payloads = await client.fetch_payloads("fast")
     await client.close()
 
-    assert set(payloads) == {"jobs", "backups"}
-    assert authorization_headers
-    assert all(value and value.startswith("Basic ") for value in authorization_headers)
-    assert not any(value and value.startswith("Bearer ") for value in authorization_headers)
+    assert payloads["jobs"] == {"jobs": [{"id": "done-1"}]}
+    assert payloads["backups"] == {"backups": [{"id": "backup-1"}]}
+    assert "HTTPStatusError" in payloads[ERRORS_KEY]["jobs_active"]
 
 
 async def _get_json(client: httpx.AsyncClient, endpoint: str) -> dict:

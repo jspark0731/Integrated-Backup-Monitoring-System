@@ -1,0 +1,50 @@
+{
+  "index_patterns": ["nw-*-backup-*"],
+  "priority": 250,
+  "version": 1,
+  "_meta": {
+    "description": "NetWorker deduplicated backup event documents"
+  },
+  "template": {
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "observed_at": {"type": "date"},
+        "collector": {"type": "keyword"},
+        "device_name": {"type": "keyword"},
+        "target_type": {"type": "keyword"},
+        "solution": {"type": "keyword"},
+        "document_family": {"type": "keyword"},
+        "document_type": {"type": "keyword"},
+        "processing_mode": {"type": "keyword"},
+        "source_raw_id": {"type": "keyword"},
+        "record_id": {"type": "keyword"},
+        "derived_id": {"type": "keyword"},
+        "source_networker": {"type": "keyword"},
+        "security_domain": {"type": "keyword"},
+        "index_month": {"type": "keyword"},
+        "payload": {
+          "properties": {
+            "backup_id": {"type": "keyword"},
+            "client_name": {"type": "keyword"},
+            "client_id": {"type": "keyword"},
+            "policy_name": {"type": "keyword"},
+            "workflow_name": {"type": "keyword"},
+            "group": {"type": "keyword"},
+            "name": {"type": "keyword"},
+            "type": {"type": "keyword"},
+            "level": {"type": "keyword"},
+            "save_time": {"type": "date"},
+            "completion_time": {"type": "date"},
+            "retention_time": {"type": "date"},
+            "event_time": {"type": "date"},
+            "backup_month": {"type": "keyword"},
+            "file_count": {"type": "long"},
+            "size_bytes": {"type": "long"}
+          }
+        }
+      }
+    }
+  }
+}

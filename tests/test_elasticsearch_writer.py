@@ -171,6 +171,14 @@ def test_networker_raw_document_can_be_transformed_to_derived_documents() -> Non
             "policies": [{"policy_name": "Bronze"}],
             "workflows": [{"workflow_name": "Filesystem"}],
             "monthly_report": [{"policy_name": "Bronze", "month": "2026-06"}],
+            "backups": [
+                {
+                    "backup_id": "backup-1",
+                    "save_time": "2026-06-28T23:55:00Z",
+                    "source_networker": "core",
+                    "security_domain": "core",
+                }
+            ],
         },
     }
 
@@ -181,10 +189,44 @@ def test_networker_raw_document_can_be_transformed_to_derived_documents() -> Non
         "client",
         "policy",
         "workflow",
-        "monthly-report",
+        "backup",
     ]
     assert documents[0]["processing_mode"] == "elt"
     assert documents[0]["derived_id"] == "networker_core:job:1:2026-06"
+    assert documents[-1]["derived_id"] == "networker_core:backup:backup-1"
+    assert documents[-1]["index_month"] == "2026-06"
+    assert documents[-1]["@timestamp"] == "2026-06-28T23:55:00+00:00"
+
+
+def test_networker_backup_action_uses_event_month_and_stable_id() -> None:
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+    result = CollectionResult(
+        collector="networker_core",
+        target_type="Networker",
+        protocol="rest",
+        collected_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        ok=True,
+        payload={
+            "summary": {"source_networker": "core"},
+            "backups": [
+                {
+                    "backup_id": "backup-42",
+                    "save_time": "2026-06-30T23:59:00Z",
+                    "source_networker": "core",
+                    "security_domain": "chnl",
+                }
+            ],
+        },
+    )
+
+    backup_action = next(
+        action
+        for action in writer._actions_for_result(result)
+        if action["_source"].get("document_type") == "backup"
+    )
+
+    assert backup_action["_index"] == "nw-chnl-backup-2026-06"
+    assert backup_action["_id"] == "networker_core:backup:backup-42"
 
 
 def test_networker_actions_route_ops_and_domain_entity_indexes() -> None:
@@ -247,7 +289,6 @@ def test_networker_actions_route_ops_and_domain_entity_indexes() -> None:
         "nw-unmapped-client-2026-07",
         "nw-core-policy-2026-07",
         "nw-core-workflow-2026-07",
-        "nw-core-monthly-2026-07",
     ]
     required_fields = {
         "collector",

@@ -503,10 +503,10 @@ def test_networker_rest_parser_extracts_backup_summary_values() -> None:
                         "runOnHost": "client02",
                     },
                     {
-                        "id": 3,
+                        "jobId": 3,
                         "name": "Database",
                         "type": "backup",
-                        "state": "Running",
+                        "completionStatus": "Running",
                         "runOnHost": "db01",
                     },
                 ]
@@ -564,6 +564,11 @@ def test_networker_rest_parser_extracts_backup_summary_values() -> None:
                     }
                 ]
             },
+            "_query_window": {
+                "start": "2026-08-28T12:10:00",
+                "end": "2026-08-28T12:30:00",
+                "minutes": 20,
+            },
         },
         server_name="networker_core",
     )
@@ -574,6 +579,10 @@ def test_networker_rest_parser_extracts_backup_summary_values() -> None:
     assert parsed["summary"]["job_success_count_by_policy"]["Filesystem"] == 1
     assert parsed["summary"]["job_failed_count_by_policy"]["Filesystem"] == 1
     assert parsed["summary"]["job_running_count_by_policy"]["Database"] == 1
+    assert parsed["summary"]["query_window"]["minutes"] == 20
+    assert parsed["jobs"][2]["job_id"] == 3
+    assert parsed["jobs"][2]["status"] == "running"
+    assert parsed["backups"][0]["backup_id"] == "backup-1"
     assert parsed["clients"][1]["client_os_family"] == "Windows"
     assert parsed["workflows"][0]["action_count"] == 1
     assert parsed["monthly_report"][0]["client_count"] == 2

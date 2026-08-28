@@ -88,6 +88,10 @@ class CollectorConfig:
     verify_tls: bool = True
     ca_certs: str | None = None
     rest_max_concurrency: int = 4
+    rest_request_spacing_seconds: float = 0.0
+    networker_query_window_minutes: int = 20
+    networker_active_jobs_query: str | None = "completionStatus:Running"
+    networker_field_filter: bool = True
     commands: dict[str, str] = field(default_factory=dict)
     ssh_key_path: str | None = None
     ssh_known_hosts_path: str | None = None
@@ -155,6 +159,11 @@ class CollectorConfig:
     def _rest_skip_reason(self) -> str | None:
         if self.rest_max_concurrency <= 0:
             return f"invalid rest.max_concurrency: {self.rest_max_concurrency}"
+        if self.rest_request_spacing_seconds < 0:
+            return (
+                "invalid rest.request_spacing_seconds: "
+                f"{self.rest_request_spacing_seconds}"
+            )
         required = {"base_url": self.base_url}
         if self.type == "i6000":
             required.update(
@@ -165,6 +174,11 @@ class CollectorConfig:
                 }
             )
         elif self.type == "Networker":
+            if self.networker_query_window_minutes <= 0:
+                return (
+                    "invalid rest.query_window_minutes: "
+                    f"{self.networker_query_window_minutes}"
+                )
             if self.endpoints:
                 required["endpoints"] = self.endpoints
             required["source_networker"] = self.source_networker
@@ -266,6 +280,7 @@ def _parse_elasticsearch(raw: dict[str, Any]) -> ElasticsearchConfig:
 
 def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
     schedule, legacy_schedule_second = _parse_schedule(raw, raw["type"])
+    rest = raw.get("rest") or {}
     return CollectorConfig(
         name=raw["name"],
         type=raw["type"],
@@ -292,7 +307,13 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         password=_optional_secret(raw, "password"),
         verify_tls=bool(raw.get("verify_tls", True)),
         ca_certs=_optional(raw.get("ca_certs")),
-        rest_max_concurrency=int((raw.get("rest") or {}).get("max_concurrency", 4)),
+        rest_max_concurrency=int(rest.get("max_concurrency", 4)),
+        rest_request_spacing_seconds=float(rest.get("request_spacing_seconds", 0)),
+        networker_query_window_minutes=int(rest.get("query_window_minutes", 20)),
+        networker_active_jobs_query=_optional(
+            rest.get("active_jobs_query", "completionStatus:Running")
+        ),
+        networker_field_filter=bool(rest.get("field_filter", True)),
         commands=dict(raw.get("commands", {})),
         ssh_key_path=_optional(raw.get("ssh_key_path")),
         ssh_known_hosts_path=_optional(raw.get("ssh_known_hosts_path")),

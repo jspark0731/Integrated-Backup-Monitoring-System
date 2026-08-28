@@ -204,7 +204,7 @@ collector별 최신 운영 상태를 제공한다. fast 수집만 current를 갱
 |---|---|---|
 | DD / DXi | `summary` | `device_name`, `server`, `name`, collector |
 | i6000 | `summary`, `drive`, `media`, `partition`, `robot` | 장비별 `serial_number`, `barcode`, `name` |
-| NetWorker | `job`, `job-run`, `client`, `policy`, `workflow`, `monthly-report` | 각 엔티티 ID/이름 조합 |
+| NetWorker | `job`, `job-run`, `backup`, `client`, `policy`, `workflow` | 각 엔티티 ID/이름 조합 |
 | ZFS | `summary`, `pool`, `project`, `filesystem`, `lun`, `event` | 이름, 상위 경로, 이벤트 시각/요약 조합 |
 
 `job-run`은 기존 `job`과 병행 생성되는 분석 전용 문서다. 기존 `job`의
@@ -222,6 +222,21 @@ collector별 최신 운영 상태를 제공한다. fast 수집만 current를 갱
 안정적인 중복 제거를 위해 `job_id` 또는 이벤트 시각이 없는 job에는
 `job-run` 문서를 생성하지 않는다. 전용 mapping 예시는
 `config/elasticsearch_networker_job_run_index_template.example.json`에 있다.
+
+`backup` 문서는 시간 구간이 겹치는 수집에서도 중복되지 않도록 다음 이벤트
+기준 필드를 사용한다.
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `@timestamp` | `datetime` | backup `save_time`, 없으면 `completion_time` |
+| `observed_at` | `datetime` | collector 수집 시각 |
+| `index_month` | `string` | backup 저장 시각의 월 |
+| `derived_id` | `string` | `{collector}:backup:{backup_id}` |
+
+`backup_id` 또는 이벤트 시각이 없는 backup에는 파생 문서를 생성하지 않는다.
+월간 용량과 건수는 `NW-{DOMAIN}-BACKUP-YYYY-MM` 문서를 Elasticsearch에서
+집계한다. 전용 mapping 예시는
+`config/elasticsearch_networker_backup_index_template.example.json`에 있다.
 
 ## 4. 대상별 Elasticsearch Payload
 
@@ -360,6 +375,7 @@ payload
 payload
 ├─ summary: NetWorker Summary
 ├─ jobs: array<Job>
+├─ backups: array<Backup>
 ├─ clients: array<Client>
 ├─ policies: array<Policy>
 ├─ workflows: array<Workflow>
@@ -381,6 +397,7 @@ payload
 | `job_running_count_by_policy` | `object<string, integer>` |
 | `workflow_count_by_policy` | `object<string, integer>` |
 | `recent_failed_jobs` | `array<Job>` (최대 20건) |
+| `query_window` | `object` (`start`, `end`, `minutes`) |
 
 **Job**
 
@@ -397,6 +414,16 @@ payload
 | `root_parent_job_id`, `parent_job_id` | `any nullable` |
 
 `status` 정규화 값은 `success`, `failed`, `running`, `unknown`이다.
+
+**Backup**
+
+| 필드 | 타입 |
+|---|---|
+| `server`, `source_networker`, `backup_id`, `client_name`, `client_id` | `string` |
+| `client_hostname`, `security_domain`, `classification_status`, `classification_source` | `string` |
+| `policy_name`, `workflow_name`, `group`, `name`, `type`, `level` | `string` |
+| `save_time`, `completion_time`, `retention_time` | `any nullable` |
+| `file_count`, `size_bytes` | `integer nullable` |
 
 **Client**
 
@@ -419,6 +446,10 @@ payload
 
 **Monthly Report**
 
+`monthly_report`는 현재 query window에 포함된 레코드의 구간 요약이며 더 이상
+월간 derived 문서로 저장하지 않는다. 전체 월간 값은 backup 이벤트 문서를
+Elasticsearch에서 집계한다.
+
 | 필드 | 타입 |
 |---|---|
 | `server`, `month`, `policy_name`, `workflow_name` | `string` |
@@ -428,8 +459,8 @@ payload
 | `job_success_count`, `job_failed_count`, `job_running_count` | `integer` |
 | `workflow_count`, `client_count` | `integer` |
 
-원천 backup 레코드는 정규화 과정에서 집계에만 사용되며 `payload.backups`에는
-포함되지 않는다.
+원천 backup 레코드는 정규화되어 `payload.backups`에 포함되고 안정적인 ID의
+backup 파생 문서로 저장된다.
 
 ### 4.5 ZFS
 

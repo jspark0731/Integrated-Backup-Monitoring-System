@@ -279,21 +279,25 @@ collectors:
     enabled: true
     schedule:
       fast:
-        interval_minutes: 5
+        interval_minutes: 10
         minute_offset: 3
         second: 0
       slow:
-        interval_minutes: 60
-        minute_offset: 3
-        second: 30
+        interval_minutes: 360
+        minute_offset: 4
+        second: 0
     base_url: networker_core_base_url_TO_BE_FILLED
     method: GET
     username: networker_core_username_TO_BE_FILLED
     password: networker_core_password_TO_BE_FILLED
     verify_tls: true
     ca_certs: networker_core_ca_certs_TO_BE_FILLED
-    rest:
-      max_concurrency: 4
+    rest: &networker_rest
+      max_concurrency: 1
+      request_spacing_seconds: 30
+      query_window_minutes: 20
+      active_jobs_query: completionStatus:Running
+      field_filter: true
     source_networker: core
     classification:
       hostname_csv_path: /apps/config/hostname_domain.csv
@@ -306,21 +310,20 @@ collectors:
     enabled: true
     schedule:
       fast:
-        interval_minutes: 5
-        minute_offset: 3
-        second: 0
+        interval_minutes: 10
+        minute_offset: 6
+        second: 20
       slow:
-        interval_minutes: 60
-        minute_offset: 3
-        second: 30
+        interval_minutes: 360
+        minute_offset: 7
+        second: 20
     base_url: networker_chnl_base_url_TO_BE_FILLED
     method: GET
     username: networker_chnl_username_TO_BE_FILLED
     password: networker_chnl_password_TO_BE_FILLED
     verify_tls: true
     ca_certs: networker_chnl_ca_certs_TO_BE_FILLED
-    rest:
-      max_concurrency: 4
+    rest: *networker_rest
     source_networker: chnl
     classification:
       hostname_csv_path: /apps/config/hostname_domain.csv
@@ -333,21 +336,20 @@ collectors:
     enabled: true
     schedule:
       fast:
-        interval_minutes: 5
-        minute_offset: 3
-        second: 0
+        interval_minutes: 10
+        minute_offset: 9
+        second: 40
       slow:
-        interval_minutes: 60
-        minute_offset: 3
-        second: 30
+        interval_minutes: 360
+        minute_offset: 10
+        second: 40
     base_url: networker_info_base_url_TO_BE_FILLED
     method: GET
     username: networker_info_username_TO_BE_FILLED
     password: networker_info_password_TO_BE_FILLED
     verify_tls: true
     ca_certs: networker_info_ca_certs_TO_BE_FILLED
-    rest:
-      max_concurrency: 4
+    rest: *networker_rest
     source_networker: info
     classification:
       hostname_csv_path: /apps/config/hostname_domain.csv
