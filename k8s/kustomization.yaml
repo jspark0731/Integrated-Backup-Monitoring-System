@@ -4,5 +4,7 @@ resources:
   - dxi.yaml
   - dd.yaml
   - i6000.yaml
-  - networker.yaml
+  - networker-core.yaml
+  - networker-chnl.yaml
+  - networker-info.yaml
   - zfs.yaml

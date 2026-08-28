@@ -14,17 +14,21 @@ NetWorker ─ REST ──────┼─> CollectorScheduler ─┬─> Prome
 ZFS ── REST ───────────┘                       └─> Elasticsearch bulk write
 ```
 
-Kubernetes에서는 solution별로 다음 5개 Deployment를 사용합니다.
+Kubernetes에서는 다음 7개 Deployment를 사용합니다.
 
 - `backup-dashboard-collector-dxi`
 - `backup-dashboard-collector-dd`
 - `backup-dashboard-collector-i6000`
-- `backup-dashboard-collector-networker`
+- `backup-dashboard-collector-networker-core`
+- `backup-dashboard-collector-networker-chnl`
+- `backup-dashboard-collector-networker-info`
 - `backup-dashboard-collector-zfs`
 
-NetWorker의 CORE, CHNL, INFO Collector는 NetWorker Deployment 하나에서
-독립적인 asyncio scheduler task로 실행됩니다. 한 Collector의 실패는 다른
-Collector task를 종료하지 않습니다.
+NetWorker의 CORE, CHNL, INFO Collector는 각각 별도 Pod와 ConfigMap에서
+실행됩니다. 세 Deployment는 동일한 image와 통합 Secret을 사용하지만 각
+Pod는 Elasticsearch 공통 key와 자기 NetWorker 서버의 CA 및 계정 key만
+선택해서 mount합니다. 기존 단일 NetWorker Deployment에서 전환할 때는
+중복 수집을 막기 위해 구 Deployment를 먼저 scale 0 해야 합니다.
 
 ## Collection Schedule
 

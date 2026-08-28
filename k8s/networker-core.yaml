@@ -1,14 +1,15 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: backup-dashboard-collector-networker-config
+  name: backup-dashboard-collector-networker-core-config
   labels:
     app: backup-dashboard-collector
     collector-group: networker
+    networker-server: core
 data:
   collector.yaml: |
     app:
-      name: backup-dashboard-collector-networker
+      name: backup-dashboard-collector-networker-core
       log_level: INFO
     elasticsearch:
       enabled: false
@@ -31,7 +32,7 @@ data:
         password_file: /apps/secrets/networker/core/password
         verify_tls: true
         ca_certs: /apps/secrets/networker/core/ca.crt
-        rest: &networker_rest
+        rest:
           max_concurrency: 1
           request_spacing_seconds: 30
           jobs_query_window_minutes: 10
@@ -39,42 +40,10 @@ data:
           active_jobs_query: completionStatus:Running
           field_filter: true
         source_networker: core
-        classification: &networker_classification
+        classification:
           hostname_csv_path: /apps/config/hostname_domain.csv
           allowed_domains: [core, chnl, info]
           unmapped_domain: unmapped
-      - name: networker_chnl
-        type: Networker
-        protocol: rest
-        enabled: true
-        schedule:
-          jobs: {interval_minutes: 5, minute_offset: 1, second: 20}
-          backups: {interval_minutes: 15, minute_offset: 9, second: 20}
-          inventory: {interval_minutes: 60, minute_offset: 18, second: 20}
-        base_url: networker_chnl_base_url_TO_BE_FILLED
-        username_file: /apps/secrets/networker/chnl/username
-        password_file: /apps/secrets/networker/chnl/password
-        verify_tls: true
-        ca_certs: /apps/secrets/networker/chnl/ca.crt
-        rest: *networker_rest
-        source_networker: chnl
-        classification: *networker_classification
-      - name: networker_info
-        type: Networker
-        protocol: rest
-        enabled: true
-        schedule:
-          jobs: {interval_minutes: 5, minute_offset: 4, second: 40}
-          backups: {interval_minutes: 15, minute_offset: 12, second: 40}
-          inventory: {interval_minutes: 60, minute_offset: 31, second: 40}
-        base_url: networker_info_base_url_TO_BE_FILLED
-        username_file: /apps/secrets/networker/info/username
-        password_file: /apps/secrets/networker/info/password
-        verify_tls: true
-        ca_certs: /apps/secrets/networker/info/ca.crt
-        rest: *networker_rest
-        source_networker: info
-        classification: *networker_classification
   hostname_domain.csv: |
     hostname,security_domain
     networker_core_client_hostname_TO_BE_FILLED,core
@@ -84,21 +53,26 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backup-dashboard-collector-networker
+  name: backup-dashboard-collector-networker-core
   labels:
     app: backup-dashboard-collector
     collector-group: networker
+    networker-server: core
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: backup-dashboard-collector
       collector-group: networker
+      networker-server: core
   template:
     metadata:
       labels:
         app: backup-dashboard-collector
         collector-group: networker
+        networker-server: core
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: /metrics
@@ -106,35 +80,18 @@ spec:
     spec:
       hostAliases:
         - ip: networker_core_ip_TO_BE_FILLED
-          hostnames:
-            - networker_core_hostname_TO_BE_FILLED
-        - ip: networker_chnl_ip_TO_BE_FILLED
-          hostnames:
-            - networker_chnl_hostname_TO_BE_FILLED
-        - ip: networker_info_ip_TO_BE_FILLED
-          hostnames:
-            - networker_info_hostname_TO_BE_FILLED
+          hostnames: [networker_core_hostname_TO_BE_FILLED]
       containers:
         - name: collector
           image: backup-dashboard-collector-networker:latest
           ports:
-            - name: http
-              containerPort: 8080
+            - {name: http, containerPort: 8080}
           env:
-            - name: APP_CONFIG
-              value: /apps/config/collector.yaml
+            - {name: APP_CONFIG, value: /apps/config/collector.yaml}
           volumeMounts:
-            - name: config
-              mountPath: /apps/config/collector.yaml
-              subPath: collector.yaml
-              readOnly: true
-            - name: config
-              mountPath: /apps/config/hostname_domain.csv
-              subPath: hostname_domain.csv
-              readOnly: true
-            - name: secrets
-              mountPath: /apps/secrets
-              readOnly: true
+            - {name: config, mountPath: /apps/config/collector.yaml, subPath: collector.yaml, readOnly: true}
+            - {name: config, mountPath: /apps/config/hostname_domain.csv, subPath: hostname_domain.csv, readOnly: true}
+            - {name: secrets, mountPath: /apps/secrets, readOnly: true}
           readinessProbe:
             httpGet: {path: /readyz, port: http}
             initialDelaySeconds: 5
@@ -149,7 +106,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: backup-dashboard-collector-networker-config
+            name: backup-dashboard-collector-networker-core-config
         - name: secrets
           secret:
             secretName: backup-dashboard-collector-networker-secrets
@@ -160,25 +117,19 @@ spec:
               - {key: networker-core-ca-crt, path: networker/core/ca.crt}
               - {key: networker-core-username, path: networker/core/username}
               - {key: networker-core-password, path: networker/core/password}
-              - {key: networker-chnl-ca-crt, path: networker/chnl/ca.crt}
-              - {key: networker-chnl-username, path: networker/chnl/username}
-              - {key: networker-chnl-password, path: networker/chnl/password}
-              - {key: networker-info-ca-crt, path: networker/info/ca.crt}
-              - {key: networker-info-username, path: networker/info/username}
-              - {key: networker-info-password, path: networker/info/password}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backup-dashboard-collector-networker
+  name: backup-dashboard-collector-networker-core
   labels:
     app: backup-dashboard-collector
     collector-group: networker
+    networker-server: core
 spec:
   selector:
     app: backup-dashboard-collector
     collector-group: networker
+    networker-server: core
   ports:
-    - name: http
-      port: 8080
-      targetPort: http
+    - {name: http, port: 8080, targetPort: http}

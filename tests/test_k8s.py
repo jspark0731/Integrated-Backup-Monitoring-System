@@ -3,72 +3,123 @@ from pathlib import Path
 import yaml
 
 
-def test_networker_manifest_has_one_workload_with_three_basic_auth_collectors() -> None:
-    documents = list(yaml.safe_load_all(Path("k8s/networker.yaml").read_text(encoding="utf-8")))
-    resources = {document["kind"]: document for document in documents}
+NETWORKER_SERVERS = {
+    "core": {
+        "second": 0,
+        "jobs_offset": 3,
+        "backups_offset": 6,
+        "inventory_offset": 15,
+    },
+    "chnl": {
+        "second": 20,
+        "jobs_offset": 1,
+        "backups_offset": 9,
+        "inventory_offset": 18,
+    },
+    "info": {
+        "second": 40,
+        "jobs_offset": 4,
+        "backups_offset": 12,
+        "inventory_offset": 31,
+    },
+}
+ELASTICSEARCH_SECRET_KEYS = {
+    "elasticsearch-username",
+    "elasticsearch-password",
+    "elasticsearch-ca-crt",
+}
 
-    assert set(resources) == {"ConfigMap", "Deployment", "Service"}
-    assert resources["Deployment"]["metadata"]["name"] == "backup-dashboard-collector-networker"
-    assert resources["Deployment"]["spec"]["replicas"] == 1
 
-    embedded_config = yaml.safe_load(resources["ConfigMap"]["data"]["collector.yaml"])
-    collectors = embedded_config["collectors"]
-
-    assert [collector["name"] for collector in collectors] == [
-        "networker_core",
-        "networker_chnl",
-        "networker_info",
-    ]
-    assert {collector["source_networker"] for collector in collectors} == {
-        "core",
-        "chnl",
-        "info",
-    }
-    assert all(
-        set(collector["schedule"]) == {"jobs", "backups", "inventory"}
-        for collector in collectors
+def _resources_for(source: str) -> dict[str, dict]:
+    documents = yaml.safe_load_all(
+        Path(f"k8s/networker-{source}.yaml").read_text(encoding="utf-8")
     )
-    assert all("token_file" not in collector for collector in collectors)
-    assert all(collector["username_file"] for collector in collectors)
-    assert all(collector["password_file"] for collector in collectors)
-    assert all(collector["ca_certs"] for collector in collectors)
-    assert [collector["schedule"]["jobs"]["interval_minutes"] for collector in collectors] == [
-        5,
-        5,
-        5,
-    ]
-    assert [collector["schedule"]["jobs"]["minute_offset"] for collector in collectors] == [
-        3,
-        1,
-        4,
-    ]
-    assert [collector["schedule"]["backups"]["minute_offset"] for collector in collectors] == [
-        6,
-        9,
-        12,
-    ]
-    assert [collector["schedule"]["inventory"]["minute_offset"] for collector in collectors] == [
-        15,
-        18,
-        31,
-    ]
-    assert all(collector["schedule"]["backups"]["interval_minutes"] == 15 for collector in collectors)
-    assert all(collector["schedule"]["inventory"]["interval_minutes"] == 60 for collector in collectors)
-    assert all(collector["rest"]["max_concurrency"] == 1 for collector in collectors)
-    assert all(collector["rest"]["request_spacing_seconds"] == 30 for collector in collectors)
-    assert all(collector["rest"]["jobs_query_window_minutes"] == 10 for collector in collectors)
-    assert all(collector["rest"]["backups_query_window_minutes"] == 20 for collector in collectors)
-    assert all(collector["rest"]["field_filter"] for collector in collectors)
+    return {document["kind"]: document for document in documents}
 
-    for collector in collectors:
+
+def test_networker_has_one_workload_per_server() -> None:
+    for source, expected in NETWORKER_SERVERS.items():
+        resources = _resources_for(source)
+        assert set(resources) == {"ConfigMap", "Deployment", "Service"}
+
+        resource_name = f"backup-dashboard-collector-networker-{source}"
+        config_map = resources["ConfigMap"]
+        deployment = resources["Deployment"]
+        service = resources["Service"]
+
+        assert config_map["metadata"]["name"] == f"{resource_name}-config"
+        assert deployment["metadata"]["name"] == resource_name
+        assert service["metadata"]["name"] == resource_name
+        assert deployment["spec"]["replicas"] == 1
+        assert deployment["spec"]["strategy"] == {"type": "Recreate"}
+
+        selector = {
+            "app": "backup-dashboard-collector",
+            "collector-group": "networker",
+            "networker-server": source,
+        }
+        assert deployment["spec"]["selector"]["matchLabels"] == selector
+        assert deployment["spec"]["template"]["metadata"]["labels"] == selector
+        assert service["spec"]["selector"] == selector
+
+        pod_spec = deployment["spec"]["template"]["spec"]
+        assert pod_spec["hostAliases"] == [
+            {
+                "ip": f"networker_{source}_ip_TO_BE_FILLED",
+                "hostnames": [f"networker_{source}_hostname_TO_BE_FILLED"],
+            }
+        ]
+        assert pod_spec["containers"][0]["image"] == (
+            "backup-dashboard-collector-networker:latest"
+        )
+        assert pod_spec["volumes"][0]["configMap"]["name"] == (
+            f"{resource_name}-config"
+        )
+
+        embedded_config = yaml.safe_load(config_map["data"]["collector.yaml"])
+        assert embedded_config["app"]["name"] == resource_name
+        assert len(embedded_config["collectors"]) == 1
+        collector = embedded_config["collectors"][0]
+        assert collector["name"] == f"networker_{source}"
+        assert collector["source_networker"] == source
+        assert "token_file" not in collector
+        assert collector["username_file"] == (
+            f"/apps/secrets/networker/{source}/username"
+        )
+        assert collector["password_file"] == (
+            f"/apps/secrets/networker/{source}/password"
+        )
+        assert collector["ca_certs"] == f"/apps/secrets/networker/{source}/ca.crt"
+
         schedule = collector["schedule"]
+        assert set(schedule) == {"jobs", "backups", "inventory"}
+        assert schedule["jobs"] == {
+            "interval_minutes": 5,
+            "minute_offset": expected["jobs_offset"],
+            "second": expected["second"],
+        }
+        assert schedule["backups"] == {
+            "interval_minutes": 15,
+            "minute_offset": expected["backups_offset"],
+            "second": expected["second"],
+        }
+        assert schedule["inventory"] == {
+            "interval_minutes": 60,
+            "minute_offset": expected["inventory_offset"],
+            "second": expected["second"],
+        }
+        assert collector["rest"] == {
+            "max_concurrency": 1,
+            "request_spacing_seconds": 30,
+            "jobs_query_window_minutes": 10,
+            "backups_query_window_minutes": 20,
+            "active_jobs_query": "completionStatus:Running",
+            "field_filter": True,
+        }
+
         minute_sets = {
             name: set(
-                range(
-                    values["minute_offset"],
-                    60,
-                    values["interval_minutes"],
-                )
+                range(values["minute_offset"], 60, values["interval_minutes"])
             )
             for name, values in schedule.items()
         }
@@ -76,19 +127,31 @@ def test_networker_manifest_has_one_workload_with_three_basic_auth_collectors() 
         assert minute_sets["jobs"].isdisjoint(minute_sets["inventory"])
         assert minute_sets["backups"].isdisjoint(minute_sets["inventory"])
 
-    secret_items = resources["Deployment"]["spec"]["template"]["spec"]["volumes"][1][
-        "secret"
-    ]["items"]
-    secret_keys = {item["key"] for item in secret_items}
-    assert {
-        "networker-core-ca-crt",
-        "networker-chnl-ca-crt",
-        "networker-info-ca-crt",
-    } <= secret_keys
-    assert not any("token" in key or "ifrs" in key for key in secret_keys)
+
+def test_networker_workloads_share_secret_but_mount_only_their_keys() -> None:
+    for source in NETWORKER_SERVERS:
+        deployment = _resources_for(source)["Deployment"]
+        secret = deployment["spec"]["template"]["spec"]["volumes"][1]["secret"]
+
+        assert secret["secretName"] == (
+            "backup-dashboard-collector-networker-secrets"
+        )
+        secret_keys = {item["key"] for item in secret["items"]}
+        assert secret_keys == ELASTICSEARCH_SECRET_KEYS | {
+            f"networker-{source}-ca-crt",
+            f"networker-{source}-username",
+            f"networker-{source}-password",
+        }
+        assert not any("token" in key or "ifrs" in key for key in secret_keys)
+        assert not any(
+            f"networker-{other}-" in key
+            for other in NETWORKER_SERVERS
+            if other != source
+            for key in secret_keys
+        )
 
 
-def test_kustomization_references_only_consolidated_networker_manifest() -> None:
+def test_kustomization_references_three_networker_manifests() -> None:
     kustomization = yaml.safe_load(
         Path("k8s/kustomization.yaml").read_text(encoding="utf-8")
     )
@@ -98,5 +161,14 @@ def test_kustomization_references_only_consolidated_networker_manifest() -> None
         if resource.startswith("networker")
     ]
 
-    assert networker_resources == ["networker.yaml"]
-    assert not list(Path("k8s").glob("networker-*.yaml"))
+    assert networker_resources == [
+        "networker-core.yaml",
+        "networker-chnl.yaml",
+        "networker-info.yaml",
+    ]
+    assert not Path("k8s/networker.yaml").exists()
+    assert sorted(Path("k8s").glob("networker-*.yaml")) == [
+        Path("k8s/networker-chnl.yaml"),
+        Path("k8s/networker-core.yaml"),
+        Path("k8s/networker-info.yaml"),
+    ]

@@ -2,14 +2,17 @@
 
 ## 배포 구조
 
-단일 Kubernetes node에서 solution별 Deployment 하나를 기본으로 사용한다.
+단일 Kubernetes node에서 solution별 Deployment를 기본으로 사용하되,
+NetWorker는 서버별 장애 격리를 위해 CORE, CHNL, INFO를 분리한다.
 
 | Deployment | 내부 Collector | Service |
 |---|---:|---|
 | `backup-dashboard-collector-dxi` | 2 | 동일 이름 |
 | `backup-dashboard-collector-dd` | 3 | 동일 이름 |
 | `backup-dashboard-collector-i6000` | 4 | 동일 이름 |
-| `backup-dashboard-collector-networker` | 3 | 동일 이름 |
+| `backup-dashboard-collector-networker-core` | 1 | 동일 이름 |
+| `backup-dashboard-collector-networker-chnl` | 1 | 동일 이름 |
+| `backup-dashboard-collector-networker-info` | 1 | 동일 이름 |
 | `backup-dashboard-collector-zfs` | 4 | 동일 이름 |
 
 모든 Deployment는 replica 1을 기본으로 한다. 같은 Collector를 여러 replica로
@@ -36,7 +39,9 @@ Secret에는 다음 값을 둔다.
 - CA certificate
 
 각 manifest의 `volumes[].secret.items`가 실제 Secret key와 mount 경로의
-기준이다. Secret 이름은 다음과 같다.
+기준이다. NetWorker의 세 Deployment는 Secret 하나를 공유하지만, 각 Pod에는
+Elasticsearch 공통 key와 해당 서버의 CA·username·password만 mount한다.
+Secret 이름은 다음과 같다.
 
 | Solution | Secret |
 |---|---|
@@ -66,6 +71,15 @@ networker-chnl-password
 networker-info-ca-crt
 networker-info-username
 networker-info-password
+```
+
+각 Deployment는 `strategy.type: Recreate`와 `replicas: 1`을 사용한다.
+따라서 배포 중 구 Pod와 신 Pod가 동시에 같은 NetWorker 서버를 호출하지
+않는다. CORE 계정만 변경했다면 CORE Deployment만 재시작한다.
+
+```bash
+kubectl rollout restart deployment/backup-dashboard-collector-networker-core \
+  --namespace backup-dashboard
 ```
 
 NetWorker REST API는 username/password Basic 인증을 사용한다. CORE, CHNL,
@@ -149,6 +163,24 @@ memory를 우선 조정한다.
 7. image tag를 운영 registry의 immutable tag로 바꾼다.
 
 ## 검증 및 배포
+
+`backup-dashboard-collector-networker` 단일 Deployment에서 서버별 Deployment로
+처음 전환할 때는 기존 Pod를 먼저 중지한다. `kubectl apply -k`만 실행하면
+기존 resource는 자동 삭제되지 않아 구 Pod와 새 Pod가 동시에 수집할 수 있다.
+
+```bash
+kubectl scale deployment/backup-dashboard-collector-networker \
+  --replicas=0 --namespace backup-dashboard
+
+kubectl apply -k k8s
+
+kubectl delete deployment/backup-dashboard-collector-networker \
+  service/backup-dashboard-collector-networker \
+  configmap/backup-dashboard-collector-networker-config \
+  --namespace backup-dashboard --ignore-not-found
+```
+
+전환 이후 일반 배포와 검증은 다음 명령을 사용한다.
 
 ```bash
 kubectl kustomize k8s >/tmp/backup-collector-rendered.yaml

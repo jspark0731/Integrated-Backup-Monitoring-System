@@ -40,3 +40,6 @@ tools/
 
 # etc
 .csv
+
+# documents
+docs/
