@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 import logging
 from typing import Any
 
 from apps.core.config import ElasticsearchConfig
 from apps.core.metrics import ELASTICSEARCH_WRITE_TOTAL
 from apps.models import CollectionResult
-from apps.processors.derived import build_derived_documents
+from apps.processors.derived import iter_derived_documents
 
 LOGGER = logging.getLogger(__name__)
+BULK_CHUNK_SIZE = 250
+BULK_MAX_CHUNK_BYTES = 10 * 1024 * 1024
 
 SITE_ALIASES = {
     "core": "CORE",
@@ -44,9 +47,18 @@ class ElasticsearchWriter:
             ELASTICSEARCH_WRITE_TOTAL.labels("skipped").inc()
             return
 
-        actions = [action for result in results for action in self._actions_for_result(result)]
+        actions = (
+            action
+            for result in results
+            for action in self._iter_actions_for_result(result)
+        )
         try:
-            await self._async_bulk(self.client, actions)
+            await self._async_bulk(
+                self.client,
+                actions,
+                chunk_size=BULK_CHUNK_SIZE,
+                max_chunk_bytes=BULK_MAX_CHUNK_BYTES,
+            )
             ELASTICSEARCH_WRITE_TOTAL.labels("success").inc()
         except Exception:
             LOGGER.exception("Failed to write collector results to Elasticsearch")
@@ -57,64 +69,60 @@ class ElasticsearchWriter:
             await self.client.close()
 
     def _actions_for_result(self, result: CollectionResult) -> list[dict]:
+        """Materialize actions for compatibility with diagnostics and tests."""
+        return list(self._iter_actions_for_result(result))
+
+    def _iter_actions_for_result(self, result: CollectionResult) -> Iterator[dict]:
         if result.target_type == "Networker":
-            return self._networker_actions(result)
-        actions = [
-            {
-                "_op_type": "index",
-                "_index": self._index_name(result, "raw"),
-                "_id": self._raw_document_id(result),
-                "_source": self._raw_document(result),
-            }
-        ]
+            yield from self._iter_networker_actions(result)
+            return
+        yield {
+            "_op_type": "index",
+            "_index": self._index_name(result, "raw"),
+            "_id": self._raw_document_id(result),
+            "_source": self._raw_document(result),
+        }
         if result.collection_class == "fast":
-            actions.append(
-                {
-                    "_op_type": "index",
-                    "_index": self._index_name(result, "current"),
-                    "_id": self._current_document_id(result),
-                    "_source": self._current_document(result),
-                }
-            )
-        return actions
+            yield {
+                "_op_type": "index",
+                "_index": self._index_name(result, "current"),
+                "_id": self._current_document_id(result),
+                "_source": self._current_document(result),
+            }
 
     def _networker_actions(self, result: CollectionResult) -> list[dict]:
+        return list(self._iter_networker_actions(result))
+
+    def _iter_networker_actions(self, result: CollectionResult) -> Iterator[dict]:
         raw_document = self._raw_document(result)
         source = self._networker_source(result)
         month = result.collected_at.strftime("%Y-%m")
         raw_index = self._normalize_index_name(f"NW-OPS-RAW-{source.upper()}-{month}")
-        actions = [
-            {
-                "_op_type": "index",
-                "_index": raw_index,
-                "_id": self._raw_document_id(result),
-                "_source": raw_document,
-            }
-        ]
+        yield {
+            "_op_type": "index",
+            "_index": raw_index,
+            "_id": self._raw_document_id(result),
+            "_source": raw_document,
+        }
         if result.collection_class == "fast":
-            actions.append(
-                {
-                    "_op_type": "index",
-                    "_index": self._normalize_index_name(f"NW-OPS-CURRENT-{source.upper()}"),
-                    "_id": self._current_document_id(result),
-                    "_source": self._current_document(result),
-                }
-            )
-        for document in build_derived_documents(raw_document):
+            yield {
+                "_op_type": "index",
+                "_index": self._normalize_index_name(f"NW-OPS-CURRENT-{source.upper()}"),
+                "_id": self._current_document_id(result),
+                "_source": self._current_document(result),
+            }
+        for document in iter_derived_documents(raw_document):
             domain = self._security_domain(document)
             document_type = self._networker_entity_segment(document)
             document_month = self._networker_document_month(document, month)
-            actions.append(
-                {
-                    "_op_type": "index",
-                    "_index": self._normalize_index_name(
-                        f"NW-{domain.upper()}-{document_type}-{document_month}"
-                    ),
-                    "_id": document["derived_id"],
-                    "_source": document,
-                }
-            )
-        return actions
+            yield {
+                "_op_type": "index",
+                "_index": self._normalize_index_name(
+                    f"NW-{domain.upper()}-{document_type}-{document_month}"
+                ),
+                "_id": document["derived_id"],
+                "_source": document,
+            }
 
     def _index_name(
         self,

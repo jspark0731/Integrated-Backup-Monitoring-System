@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from apps.core.config import ElasticsearchConfig
 from apps.models import CollectionResult
 from apps.processors.derived import build_derived_documents
@@ -33,6 +35,42 @@ def test_result_writes_raw_and_current_documents() -> None:
     assert actions[1]["_source"]["processing_mode"] == "etl"
     assert actions[1]["_source"]["device_name"] == "DXi_1"
     assert actions[1]["_source"]["summary"]["device_name"] == "DXi_1"
+
+
+@pytest.mark.asyncio
+async def test_write_many_streams_actions_in_bounded_chunks() -> None:
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+    writer.client = object()
+    captured = {}
+
+    async def fake_async_bulk(client, actions, **kwargs):
+        captured["client"] = client
+        captured["materialized_before_call"] = isinstance(actions, list)
+        captured["actions"] = list(actions)
+        captured["kwargs"] = kwargs
+        return len(captured["actions"]), []
+
+    writer._async_bulk = fake_async_bulk
+    result = CollectionResult(
+        collector="networker_core",
+        target_type="Networker",
+        protocol="rest",
+        collected_at=datetime(2026, 6, 29, tzinfo=timezone.utc),
+        ok=True,
+        payload={"summary": {"source_networker": "core"}},
+    )
+
+    await writer.write_many([result])
+
+    assert not captured["materialized_before_call"]
+    assert [action["_index"] for action in captured["actions"]] == [
+        "nw-ops-raw-core-2026-06",
+        "nw-ops-current-core",
+    ]
+    assert captured["kwargs"] == {
+        "chunk_size": 250,
+        "max_chunk_bytes": 10 * 1024 * 1024,
+    }
 
 
 def test_raw_document_ids_keep_collection_history() -> None:

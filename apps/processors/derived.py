@@ -1,27 +1,34 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
 
 
 def build_derived_documents(raw_document: dict[str, Any]) -> list[dict[str, Any]]:
+    return list(iter_derived_documents(raw_document))
+
+
+def iter_derived_documents(raw_document: dict[str, Any]) -> Iterator[dict[str, Any]]:
     payload = raw_document.get("payload")
     if not isinstance(payload, dict):
-        return []
+        return
 
     target_type = raw_document.get("target_type")
     if target_type == "Networker":
-        return _networker_documents(raw_document, payload)
+        yield from _iter_networker_documents(raw_document, payload)
     if target_type == "i6000":
-        return _i6000_documents(raw_document, payload)
+        yield from _i6000_documents(raw_document, payload)
     if target_type == "ZFS":
-        return _zfs_documents(raw_document, payload)
+        yield from _zfs_documents(raw_document, payload)
     if target_type in {"DD", "DXi"}:
-        return _device_documents(raw_document, payload)
-    return []
+        yield from _device_documents(raw_document, payload)
 
 
-def _networker_documents(raw_document: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:
+def _iter_networker_documents(
+    raw_document: dict[str, Any],
+    payload: dict[str, Any],
+) -> Iterator[dict[str, Any]]:
     specs = (
         ("job", "jobs", ("job_id", "name")),
         ("client", "clients", ("client_name", "client_id")),
@@ -29,19 +36,18 @@ def _networker_documents(raw_document: dict[str, Any], payload: dict[str, Any]) 
         ("workflow", "workflows", ("policy_name", "workflow_name")),
         ("monthly-report", "monthly_report", ("policy_name", "workflow_name", "month")),
     )
-    legacy_documents = _record_documents(raw_document, payload, "networker", specs)
-    return legacy_documents + _networker_job_run_documents(raw_document, payload)
+    yield from _iter_record_documents(raw_document, payload, "networker", specs)
+    yield from _iter_networker_job_run_documents(raw_document, payload)
 
 
-def _networker_job_run_documents(
+def _iter_networker_job_run_documents(
     raw_document: dict[str, Any],
     payload: dict[str, Any],
-) -> list[dict[str, Any]]:
+) -> Iterator[dict[str, Any]]:
     jobs = payload.get("jobs")
     if not isinstance(jobs, list):
-        return []
+        return
 
-    documents = []
     for job in jobs:
         if not isinstance(job, dict):
             continue
@@ -61,8 +67,7 @@ def _networker_job_run_documents(
         document["observed_at"] = raw_document.get("@timestamp")
         document["index_month"] = record["job_run_month"]
         document["derived_id"] = f"{document['collector']}:job-run:{job_id}"
-        documents.append(document)
-    return documents
+        yield document
 
 
 def _job_run_record(job: dict[str, Any]) -> dict[str, Any] | None:
@@ -141,7 +146,15 @@ def _record_documents(
     solution: str,
     specs: tuple[tuple[str, str, tuple[str, ...]], ...],
 ) -> list[dict[str, Any]]:
-    documents = []
+    return list(_iter_record_documents(raw_document, payload, solution, specs))
+
+
+def _iter_record_documents(
+    raw_document: dict[str, Any],
+    payload: dict[str, Any],
+    solution: str,
+    specs: tuple[tuple[str, str, tuple[str, ...]], ...],
+) -> Iterator[dict[str, Any]]:
     for document_type, payload_key, id_fields in specs:
         records = payload.get(payload_key)
         if not isinstance(records, list):
@@ -149,16 +162,13 @@ def _record_documents(
         for index, record in enumerate(records):
             if not isinstance(record, dict):
                 continue
-            documents.append(
-                _derived_document(
-                    raw_document,
-                    solution=solution,
-                    document_type=document_type,
-                    record=record,
-                    record_id=_record_id(record, id_fields, index),
-                )
+            yield _derived_document(
+                raw_document,
+                solution=solution,
+                document_type=document_type,
+                record=record,
+                record_id=_record_id(record, id_fields, index),
             )
-    return documents
 
 
 def _derived_document(

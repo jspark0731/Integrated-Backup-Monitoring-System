@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import logging
 
@@ -94,9 +95,7 @@ class CollectorScheduler:
                         active_schedule.second,
                     )
                 )
-                result = await collector.collect(collection_class)
-                self._record_result(result)
-                await self.writer.write_many([result])
+                await self._collect_write_record(collector, collection_class)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -111,11 +110,31 @@ class CollectorScheduler:
                     collection_class,
                 )
 
+    async def _collect_write_record(
+        self,
+        collector: BaseCollector,
+        collection_class: CollectionClass,
+    ) -> None:
+        result = await collector.collect(collection_class)
+        await self.writer.write_many([result])
+        self._record_result(result)
+
     def _record_result(self, result: CollectionResult) -> None:
-        self._last_results[result.collector] = result
+        status_result = _status_result(result)
+        self._last_results[result.collector] = status_result
         self._last_results_by_class.setdefault(result.collector, {})[
             result.collection_class
-        ] = result
+        ] = status_result
+
+
+def _status_result(result: CollectionResult) -> CollectionResult:
+    payload = result.payload if isinstance(result.payload, dict) else {}
+    status_payload = {
+        key: payload[key]
+        for key in ("summary", "collection_status", "endpoint_errors")
+        if key in payload
+    }
+    return replace(result, payload=status_payload)
 
 
 def seconds_until_next_run(

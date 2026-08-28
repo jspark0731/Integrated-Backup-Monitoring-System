@@ -87,6 +87,35 @@ async def test_run_once_runs_both_configured_collection_classes() -> None:
     assert set(scheduler.last_results_by_class["i6000_core_rest"]) == {"fast", "slow"}
 
 
+def test_scheduler_caches_only_status_payload() -> None:
+    scheduler = CollectorScheduler([], RecordingWriter())
+    result = CollectionResult(
+        collector="networker_core",
+        target_type="Networker",
+        protocol="rest",
+        collected_at=datetime.now(timezone.utc),
+        ok=True,
+        payload={
+            "summary": {"job_count": 1},
+            "collection_status": "success",
+            "endpoint_errors": {},
+            "jobs": [{"job_id": "job-1"}],
+            "raw": {"jobs": {"jobs": [{"id": "job-1"}]}},
+        },
+    )
+
+    scheduler._record_result(result)
+
+    cached = scheduler.last_results["networker_core"]
+    assert cached.payload == {
+        "summary": {"job_count": 1},
+        "collection_status": "success",
+        "endpoint_errors": {},
+    }
+    assert cached is scheduler.last_results_by_class["networker_core"]["fast"]
+    assert "raw" in result.payload
+
+
 @pytest.mark.asyncio
 async def test_run_once_keeps_single_schedule_fast_only() -> None:
     collector = RecordingCollector(
