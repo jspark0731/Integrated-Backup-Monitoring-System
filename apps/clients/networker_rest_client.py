@@ -20,6 +20,13 @@ DEFAULT_ENDPOINTS = {
 }
 FAST_ENDPOINTS = {"jobs", "backups"}
 SLOW_ENDPOINTS = {"clients", "policies"}
+CLASS_ENDPOINTS = {
+    "fast": FAST_ENDPOINTS,
+    "slow": SLOW_ENDPOINTS,
+    "jobs": {"jobs"},
+    "backups": {"backups"},
+    "inventory": SLOW_ENDPOINTS,
+}
 
 FIELD_FILTERS = {
     "jobs": ",".join(
@@ -111,8 +118,9 @@ class NetworkerRestClient:
             collection_class,
         )
         window_end = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        window_minutes = _query_window_minutes(self.config, collection_class)
         window_start = window_end - timedelta(
-            minutes=self.config.networker_query_window_minutes
+            minutes=window_minutes
         )
         request_plan = _build_request_plan(
             endpoints,
@@ -145,7 +153,7 @@ class NetworkerRestClient:
             payloads["_query_window"] = {
                 "start": _format_query_time(window_start),
                 "end": _format_query_time(window_end),
-                "minutes": self.config.networker_query_window_minutes,
+                "minutes": window_minutes,
             }
         if errors:
             payloads[ERRORS_KEY] = errors
@@ -182,8 +190,19 @@ def _endpoints_for_class(
 ) -> dict[str, str]:
     if collection_class is None:
         return dict(endpoints)
-    selected = FAST_ENDPOINTS if collection_class == "fast" else SLOW_ENDPOINTS
+    selected = CLASS_ENDPOINTS.get(collection_class, set())
     return {name: endpoint for name, endpoint in endpoints.items() if name in selected}
+
+
+def _query_window_minutes(
+    config: CollectorConfig,
+    collection_class: CollectionClass | None,
+) -> int:
+    if collection_class == "jobs":
+        return config.networker_jobs_query_window_minutes
+    if collection_class == "backups":
+        return config.networker_backups_query_window_minutes
+    return config.networker_query_window_minutes
 
 
 def _build_request_plan(

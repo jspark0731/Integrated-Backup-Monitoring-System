@@ -12,7 +12,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 Protocol = Literal["snmp", "rest", "ssh", "cli"]
-CollectionClass = Literal["fast", "slow"]
+CollectionClass = Literal["fast", "slow", "jobs", "backups", "inventory"]
 
 
 @dataclass(frozen=True)
@@ -35,13 +35,18 @@ class ScheduleConfig:
 
 @dataclass(frozen=True)
 class CollectionSchedulesConfig:
-    fast: ScheduleConfig
+    fast: ScheduleConfig | None = None
     slow: ScheduleConfig | None = None
+    jobs: ScheduleConfig | None = None
+    backups: ScheduleConfig | None = None
+    inventory: ScheduleConfig | None = None
 
     def items(self) -> tuple[tuple[CollectionClass, ScheduleConfig], ...]:
-        schedules: list[tuple[CollectionClass, ScheduleConfig]] = [("fast", self.fast)]
-        if self.slow is not None:
-            schedules.append(("slow", self.slow))
+        schedules: list[tuple[CollectionClass, ScheduleConfig]] = []
+        for collection_class in ("fast", "jobs", "backups", "inventory", "slow"):
+            schedule = getattr(self, collection_class)
+            if schedule is not None:
+                schedules.append((collection_class, schedule))
         return tuple(schedules)
 
 
@@ -90,6 +95,8 @@ class CollectorConfig:
     rest_max_concurrency: int = 4
     rest_request_spacing_seconds: float = 0.0
     networker_query_window_minutes: int = 20
+    networker_jobs_query_window_minutes: int = 10
+    networker_backups_query_window_minutes: int = 20
     networker_active_jobs_query: str | None = "completionStatus:Running"
     networker_field_filter: bool = True
     commands: dict[str, str] = field(default_factory=dict)
@@ -109,7 +116,10 @@ class CollectorConfig:
     def effective_schedule(self) -> ScheduleConfig:
         """Return the fast schedule for callers using the legacy single-schedule API."""
         if isinstance(self.schedule, CollectionSchedulesConfig):
-            return self.schedule.fast
+            schedules = self.schedule.items()
+            if schedules:
+                return schedules[0][1]
+            return default_schedule(self.type)
         if self.schedule is not None:
             return self.schedule
         if self.schedule_second is not None:
@@ -178,6 +188,16 @@ class CollectorConfig:
                 return (
                     "invalid rest.query_window_minutes: "
                     f"{self.networker_query_window_minutes}"
+                )
+            if self.networker_jobs_query_window_minutes <= 0:
+                return (
+                    "invalid rest.jobs_query_window_minutes: "
+                    f"{self.networker_jobs_query_window_minutes}"
+                )
+            if self.networker_backups_query_window_minutes <= 0:
+                return (
+                    "invalid rest.backups_query_window_minutes: "
+                    f"{self.networker_backups_query_window_minutes}"
                 )
             if self.endpoints:
                 required["endpoints"] = self.endpoints
@@ -310,6 +330,12 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         rest_max_concurrency=int(rest.get("max_concurrency", 4)),
         rest_request_spacing_seconds=float(rest.get("request_spacing_seconds", 0)),
         networker_query_window_minutes=int(rest.get("query_window_minutes", 20)),
+        networker_jobs_query_window_minutes=int(
+            rest.get("jobs_query_window_minutes", rest.get("query_window_minutes", 10))
+        ),
+        networker_backups_query_window_minutes=int(
+            rest.get("backups_query_window_minutes", rest.get("query_window_minutes", 20))
+        ),
         networker_active_jobs_query=_optional(
             rest.get("active_jobs_query", "completionStatus:Running")
         ),
@@ -343,7 +369,8 @@ def _parse_schedule(
 ) -> tuple[ScheduleConfig | CollectionSchedulesConfig, int | None]:
     if "schedule" in raw:
         schedule_raw = raw.get("schedule") or {}
-        if "fast" in schedule_raw or "slow" in schedule_raw:
+        schedule_classes = {"fast", "slow", "jobs", "backups", "inventory"}
+        if schedule_classes.intersection(schedule_raw):
             fast_raw = schedule_raw.get("fast") or {}
             slow_raw = schedule_raw.get("slow")
             return (
@@ -353,7 +380,9 @@ def _parse_schedule(
                         target_type=target_type,
                         default_interval_minutes=5,
                         default_second_value=0,
-                    ),
+                    )
+                    if "fast" in schedule_raw
+                    else None,
                     slow=_schedule_from_mapping(
                         slow_raw or {},
                         target_type=target_type,
@@ -361,6 +390,30 @@ def _parse_schedule(
                         default_second_value=30,
                     )
                     if slow_raw is not None
+                    else None,
+                    jobs=_schedule_from_mapping(
+                        schedule_raw.get("jobs") or {},
+                        target_type=target_type,
+                        default_interval_minutes=5,
+                        default_second_value=0,
+                    )
+                    if "jobs" in schedule_raw
+                    else None,
+                    backups=_schedule_from_mapping(
+                        schedule_raw.get("backups") or {},
+                        target_type=target_type,
+                        default_interval_minutes=15,
+                        default_second_value=0,
+                    )
+                    if "backups" in schedule_raw
+                    else None,
+                    inventory=_schedule_from_mapping(
+                        schedule_raw.get("inventory") or {},
+                        target_type=target_type,
+                        default_interval_minutes=60,
+                        default_second_value=0,
+                    )
+                    if "inventory" in schedule_raw
                     else None,
                 ),
                 None,

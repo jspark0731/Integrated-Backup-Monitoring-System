@@ -18,13 +18,17 @@ collectors:
     protocol: rest
     enabled: true
     schedule:
-      fast:
-        interval_minutes: 10
+      jobs:
+        interval_minutes: 5
         minute_offset: 3
         second: 0
-      slow:
-        interval_minutes: 360
-        minute_offset: 4
+      backups:
+        interval_minutes: 15
+        minute_offset: 6
+        second: 0
+      inventory:
+        interval_minutes: 60
+        minute_offset: 15
         second: 0
     base_url: networker_core_base_url_TO_BE_FILLED
     method: GET
@@ -35,7 +39,8 @@ collectors:
     rest: &networker_rest
       max_concurrency: 1
       request_spacing_seconds: 30
-      query_window_minutes: 20
+      jobs_query_window_minutes: 10
+      backups_query_window_minutes: 20
       active_jobs_query: completionStatus:Running
       field_filter: true
     source_networker: core
@@ -48,13 +53,17 @@ collectors:
     protocol: rest
     enabled: true
     schedule:
-      fast:
-        interval_minutes: 10
-        minute_offset: 6
+      jobs:
+        interval_minutes: 5
+        minute_offset: 1
         second: 20
-      slow:
-        interval_minutes: 360
-        minute_offset: 7
+      backups:
+        interval_minutes: 15
+        minute_offset: 9
+        second: 20
+      inventory:
+        interval_minutes: 60
+        minute_offset: 18
         second: 20
     base_url: networker_chnl_base_url_TO_BE_FILLED
     method: GET
@@ -73,13 +82,17 @@ collectors:
     protocol: rest
     enabled: true
     schedule:
-      fast:
-        interval_minutes: 10
-        minute_offset: 9
+      jobs:
+        interval_minutes: 5
+        minute_offset: 4
         second: 40
-      slow:
-        interval_minutes: 360
-        minute_offset: 10
+      backups:
+        interval_minutes: 15
+        minute_offset: 12
+        second: 40
+      inventory:
+        interval_minutes: 60
+        minute_offset: 31
         second: 40
     base_url: networker_info_base_url_TO_BE_FILLED
     method: GET

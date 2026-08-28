@@ -201,6 +201,87 @@ async def test_networker_spaces_sequential_requests(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_networker_uses_class_specific_endpoints_and_windows() -> None:
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append((request.url.path, dict(request.url.params)))
+        key = "jobs" if request.url.path.endswith("/jobs") else "backups"
+        return httpx.Response(200, json={key: []})
+
+    client = NetworkerRestClient(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            base_url="https://networker.example.com:9090",
+            username="rest-user",
+            password="secret",
+            source_networker="core",
+            verify_tls=False,
+            networker_jobs_query_window_minutes=10,
+            networker_backups_query_window_minutes=20,
+        )
+    )
+    client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    now = datetime(2026, 8, 28, 12, 30, tzinfo=timezone.utc)
+
+    jobs = await client.fetch_payloads("jobs", now=now)
+    backups = await client.fetch_payloads("backups", now=now)
+    await client.close()
+
+    assert [path for path, _ in requests] == [
+        "/nwrestapi/v3/global/jobs",
+        "/nwrestapi/v3/global/jobs",
+        "/nwrestapi/v3/global/backups",
+    ]
+    assert requests[0][1]["q"] == (
+        'endTime:["2026-08-28T12:20:00" TO "2026-08-28T12:30:00"]'
+    )
+    assert requests[2][1]["q"] == (
+        'saveTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
+    )
+    assert jobs["_query_window"]["minutes"] == 10
+    assert backups["_query_window"]["minutes"] == 20
+
+
+@pytest.mark.asyncio
+async def test_networker_inventory_only_requests_clients_and_policies() -> None:
+    paths = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path.endswith("/clients"):
+            return httpx.Response(200, json={"clients": []})
+        return httpx.Response(200, json={"protectionPolicies": []})
+
+    client = NetworkerRestClient(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            base_url="https://networker.example.com:9090",
+            username="rest-user",
+            password="secret",
+            source_networker="core",
+            verify_tls=False,
+        )
+    )
+    client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    payloads = await client.fetch_payloads("inventory")
+    await client.close()
+
+    assert paths == [
+        "/nwrestapi/v3/global/clients",
+        "/nwrestapi/v3/global/protectionpolicies",
+    ]
+    assert set(payloads) == {"clients", "policies"}
+
+
+@pytest.mark.asyncio
 async def test_networker_keeps_windowed_data_when_active_job_query_fails() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/jobs"):

@@ -92,24 +92,32 @@ kubectl create secret generic backup-dashboard-collector-networker-secrets \
 
 ## NetWorker 서버 부하 보호
 
-운영 manifest는 CORE, CHNL, INFO fast 수집을 매 10분의 3분, 6분, 9분으로
-분산한다. 완료 job은 `endTime`, backup은 `saveTime` 기준 최근 20분만 조회하며
-실행 중 job은 `completionStatus:Running` 필터로 별도 조회한다. 각 요청은 한
-서버에서 순차 실행되고 요청 사이에 30초를 둔다.
+운영 manifest는 NetWorker 수집을 `jobs`, `backups`, `inventory`로 분리한다.
+jobs는 5분마다 최근 10분을, backups는 15분마다 최근 20분을 조회한다.
+client/policy inventory는 60분마다 조회한다. CORE, CHNL, INFO는 서로 다른
+minute offset과 second를 사용하며, 같은 NetWorker 서버의 수집은 동시에
+실행하지 않는다.
 
 ```yaml
 rest:
   max_concurrency: 1
   request_spacing_seconds: 30
-  query_window_minutes: 20
+  jobs_query_window_minutes: 10
+  backups_query_window_minutes: 20
   active_jobs_query: completionStatus:Running
   field_filter: true
 ```
 
-slow client/policy inventory는 6시간 간격이다. `active_jobs_query`가 특정
-NetWorker 버전에서 지원되지 않으면 실제 `/global/jobs` 응답의 필터 가능
-필드를 확인한 뒤 값을 변경한다. 해당 요청만 실패해도 완료 job과 backup
-응답은 `collection_status: partial`로 계속 처리된다.
+완료 jobs와 active jobs, clients와 policies는 각각 응답 완료 후 30초 간격으로
+순차 호출한다. 서로 다른 수집 클래스가 가까워져도 이전 수집 종료 후 남은
+30초 cooldown을 지킨다. backups와 inventory는 동일 서버의 기존 수집이
+끝날 때까지 기다리지만, 5분 jobs는 이미 수집 중이면 해당 회차를 건너뛰어
+요청 대기열이 누적되지 않게 한다.
+
+`active_jobs_query`가 특정 NetWorker 버전에서 지원되지 않으면 실제
+`/global/jobs` 응답의 필터 가능 필드를 확인한 뒤 값을 변경한다. 해당 요청만
+실패해도 같은 클래스의 성공 응답은 `collection_status: partial`로 계속
+처리된다.
 
 시간 구간을 겹쳐 조회하므로 월간 집계는 raw의 `monthly_report`가 아니라
 `NW-{DOMAIN}-BACKUP-YYYY-MM`의 안정적인 backup 이벤트 문서를 사용한다.

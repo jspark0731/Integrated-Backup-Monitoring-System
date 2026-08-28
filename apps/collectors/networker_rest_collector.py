@@ -72,11 +72,11 @@ class NetworkerRestCollector(BaseCollector):
         server = str(summary.get("server") or self.name)
 
         NETWORKER_API_UP.labels(server).set(1)
-        if collection_class in {None, "slow"}:
+        if collection_class in {None, "slow", "inventory"}:
             for domain, count in summary.get("client_count_by_domain", {}).items():
                 NETWORKER_CLIENT_COUNT.labels(server, domain).set(count)
 
-        if collection_class in {None, "fast"}:
+        if collection_class in {None, "fast", "jobs"}:
             self._publish_domain_policy_metric(
                 NETWORKER_JOB_SUCCESS_COUNT,
                 server,
@@ -92,7 +92,7 @@ class NetworkerRestCollector(BaseCollector):
                 server,
                 summary.get("job_running_count_by_domain_policy", {}),
             )
-        if collection_class in {None, "slow"}:
+        if collection_class in {None, "slow", "inventory"}:
             self._publish_domain_policy_metric(
                 NETWORKER_WORKFLOW_COUNT,
                 server,

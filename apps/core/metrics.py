@@ -56,6 +56,12 @@ DEVICE_CAPACITY_USED_BYTES = Gauge(
     ["device_type", "device_name"],
 )
 
+SCHEDULER_OVERLAP_SKIPPED_TOTAL = Counter(
+    "backup_collector_scheduler_overlap_skipped_total",
+    "Scheduled collection runs skipped because the same collector is still busy",
+    ["collector", "collection_class"],
+)
+
 DEVICE_CAPACITY_AVAILABLE_BYTES = Gauge(
     "backup_device_capacity_available_bytes",
     "Available device capacity in bytes",

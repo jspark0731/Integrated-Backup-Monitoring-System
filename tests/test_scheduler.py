@@ -267,6 +267,118 @@ async def test_stop_closes_collector_resources_and_writer() -> None:
 
 
 @pytest.mark.asyncio
+async def test_overlapping_jobs_run_is_skipped_instead_of_queued() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingCollector(RecordingCollector):
+        def __init__(self, config: CollectorConfig) -> None:
+            super().__init__(config)
+            self.collection_classes = []
+
+        async def collect(self, collection_class="fast") -> CollectionResult:
+            self.collection_classes.append(collection_class)
+            if collection_class == "backups":
+                started.set()
+                await release.wait()
+            return CollectionResult(
+                collector=self.name,
+                target_type=self.target_type,
+                protocol=self.protocol,
+                collected_at=datetime.now(timezone.utc),
+                ok=True,
+                collection_class=collection_class,
+            )
+
+    collector = BlockingCollector(scheduler_test_config())
+    scheduler = CollectorScheduler([collector], RecordingWriter())
+
+    backup_task = asyncio.create_task(
+        scheduler._collect_write_record(collector, "backups")
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await scheduler._collect_write_record(collector, "jobs")
+
+    assert collector.collection_classes == ["backups"]
+
+    release.set()
+    await backup_task
+
+
+@pytest.mark.asyncio
+async def test_backups_wait_for_another_networker_collection() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingCollector(RecordingCollector):
+        def __init__(self, config: CollectorConfig) -> None:
+            super().__init__(config)
+            self.collection_classes = []
+
+        async def collect(self, collection_class="fast") -> CollectionResult:
+            self.collection_classes.append(collection_class)
+            if collection_class == "inventory":
+                started.set()
+                await release.wait()
+            return CollectionResult(
+                collector=self.name,
+                target_type=self.target_type,
+                protocol=self.protocol,
+                collected_at=datetime.now(timezone.utc),
+                ok=True,
+                collection_class=collection_class,
+            )
+
+    collector = BlockingCollector(scheduler_test_config())
+    scheduler = CollectorScheduler([collector], RecordingWriter())
+
+    inventory_task = asyncio.create_task(
+        scheduler._collect_write_record(collector, "inventory")
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+    backup_task = asyncio.create_task(
+        scheduler._collect_write_record(collector, "backups")
+    )
+    await asyncio.sleep(0)
+
+    assert collector.collection_classes == ["inventory"]
+
+    release.set()
+    await asyncio.gather(inventory_task, backup_task)
+    assert collector.collection_classes == ["inventory", "backups"]
+
+
+@pytest.mark.asyncio
+async def test_networker_classes_share_request_cooldown(monkeypatch) -> None:
+    sleeps = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    collector = RecordingCollector(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            base_url="https://networker.example.com:9090",
+            username="rest-user",
+            password="secret",
+            source_networker="core",
+            rest_request_spacing_seconds=30,
+        )
+    )
+    scheduler = CollectorScheduler([collector], RecordingWriter())
+    scheduler._collector_finished_at[collector.name] = 90
+    monkeypatch.setattr("apps.scheduler.time.monotonic", lambda: 100)
+    monkeypatch.setattr("apps.scheduler.asyncio.sleep", fake_sleep)
+
+    await scheduler._collect_write_record(collector, "backups")
+
+    assert sleeps == [20]
+
+
+@pytest.mark.asyncio
 async def test_three_networker_collectors_run_independently_in_one_scheduler(
     tmp_path,
 ) -> None:

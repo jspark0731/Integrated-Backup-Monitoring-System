@@ -82,7 +82,7 @@ class ElasticsearchWriter:
             "_id": self._raw_document_id(result),
             "_source": self._raw_document(result),
         }
-        if result.collection_class == "fast":
+        if result.collection_class in {"fast", "jobs"}:
             yield {
                 "_op_type": "index",
                 "_index": self._index_name(result, "current"),
@@ -104,7 +104,7 @@ class ElasticsearchWriter:
             "_id": self._raw_document_id(result),
             "_source": raw_document,
         }
-        if result.collection_class == "fast":
+        if result.collection_class in {"fast", "jobs"}:
             yield {
                 "_op_type": "index",
                 "_index": self._normalize_index_name(f"NW-OPS-CURRENT-{source.upper()}"),

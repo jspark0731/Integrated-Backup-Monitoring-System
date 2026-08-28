@@ -4,10 +4,14 @@ import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import logging
+import time
 
 from apps.collectors.base import BaseCollector
 from apps.core.config import CollectionClass, ScheduleConfig
-from apps.core.metrics import SCHEDULER_LOOP_ERROR_TOTAL
+from apps.core.metrics import (
+    SCHEDULER_LOOP_ERROR_TOTAL,
+    SCHEDULER_OVERLAP_SKIPPED_TOTAL,
+)
 from apps.models import CollectionResult
 from apps.writers.elasticsearch import ElasticsearchWriter
 
@@ -21,6 +25,10 @@ class CollectorScheduler:
         self._tasks: list[asyncio.Task] = []
         self._last_results: dict[str, CollectionResult] = {}
         self._last_results_by_class: dict[str, dict[CollectionClass, CollectionResult]] = {}
+        self._collector_locks = {
+            collector.name: asyncio.Lock() for collector in collectors
+        }
+        self._collector_finished_at: dict[str, float] = {}
 
     @property
     def last_results(self) -> dict[str, CollectionResult]:
@@ -68,12 +76,18 @@ class CollectorScheduler:
         await self.writer.close()
 
     async def run_once(self) -> list[CollectionResult]:
-        jobs = (
-            collector.collect(collection_class)
-            for collector in self.collectors
-            for collection_class, _ in collector.config.effective_schedules
+        async def collect_one(collector: BaseCollector) -> list[CollectionResult]:
+            return [
+                await collector.collect(collection_class)
+                for collection_class, _ in collector.config.effective_schedules
+            ]
+
+        grouped_results = await asyncio.gather(
+            *(collect_one(collector) for collector in self.collectors)
         )
-        results = await asyncio.gather(*jobs)
+        results = [
+            result for collector_results in grouped_results for result in collector_results
+        ]
         await self.writer.write_many(results)
         for result in results:
             self._record_result(result)
@@ -115,9 +129,40 @@ class CollectorScheduler:
         collector: BaseCollector,
         collection_class: CollectionClass,
     ) -> None:
-        result = await collector.collect(collection_class)
-        await self.writer.write_many([result])
-        self._record_result(result)
+        lock = self._collector_locks[collector.name]
+        if collection_class == "jobs" and lock.locked():
+            SCHEDULER_OVERLAP_SKIPPED_TOTAL.labels(
+                collector.name,
+                collection_class,
+            ).inc()
+            LOGGER.warning(
+                "Skipping overlapping collector run %s class=%s",
+                collector.name,
+                collection_class,
+            )
+            return
+
+        async with lock:
+            await self._wait_for_networker_cooldown(collector)
+            try:
+                result = await collector.collect(collection_class)
+                await self.writer.write_many([result])
+                self._record_result(result)
+            finally:
+                self._collector_finished_at[collector.name] = time.monotonic()
+
+    async def _wait_for_networker_cooldown(self, collector: BaseCollector) -> None:
+        if collector.target_type != "Networker":
+            return
+        finished_at = self._collector_finished_at.get(collector.name)
+        if finished_at is None:
+            return
+        remaining = (
+            collector.config.rest_request_spacing_seconds
+            - (time.monotonic() - finished_at)
+        )
+        if remaining > 0:
+            await asyncio.sleep(remaining)
 
     def _record_result(self, result: CollectionResult) -> None:
         status_result = _status_result(result)

@@ -237,6 +237,7 @@ def test_networker_actions_route_ops_and_domain_entity_indexes() -> None:
         protocol="rest",
         collected_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
         ok=True,
+        collection_class="jobs",
         payload={
             "summary": {"source_networker": "CHNL", "device_name": "NW-CHNL-01"},
             "jobs": [

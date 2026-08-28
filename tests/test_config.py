@@ -62,11 +62,17 @@ def test_group_example_configs_load_expected_collectors() -> None:
 
         assert len(config.collectors) == count
         assert {collector.type for collector in config.collectors} == collector_types
-        expected_interval = 10 if group == "networker" else 5
+        expected_interval = 5
         assert all(
             collector.effective_schedule.interval_minutes == expected_interval
             for collector in config.collectors
         )
+        if group == "networker":
+            assert all(
+                tuple(collection_class for collection_class, _ in collector.effective_schedules)
+                == ("jobs", "backups", "inventory")
+                for collector in config.collectors
+            )
         assert all(collector.skip_reason for collector in config.collectors)
 
 
@@ -247,7 +253,8 @@ collectors:
     rest:
       max_concurrency: 1
       request_spacing_seconds: 30
-      query_window_minutes: 20
+      jobs_query_window_minutes: 10
+      backups_query_window_minutes: 20
       active_jobs_query: completionStatus:Running
       field_filter: true
 """,
@@ -258,21 +265,60 @@ collectors:
 
     assert collector.rest_max_concurrency == 1
     assert collector.rest_request_spacing_seconds == 30
-    assert collector.networker_query_window_minutes == 20
+    assert collector.networker_jobs_query_window_minutes == 10
+    assert collector.networker_backups_query_window_minutes == 20
     assert collector.networker_active_jobs_query == "completionStatus:Running"
     assert collector.networker_field_filter
     assert collector.skip_reason is None
 
     config_path.write_text(
         config_path.read_text(encoding="utf-8").replace(
-            "query_window_minutes: 20",
-            "query_window_minutes: 0",
+            "jobs_query_window_minutes: 10",
+            "jobs_query_window_minutes: 0",
         ),
         encoding="utf-8",
     )
 
     collector = load_config(config_path).collectors[0]
-    assert collector.skip_reason == "invalid rest.query_window_minutes: 0"
+    assert collector.skip_reason == "invalid rest.jobs_query_window_minutes: 0"
+
+
+def test_networker_three_collection_schedules_load(tmp_path: Path) -> None:
+    classification = tmp_path / "hostname_domain.csv"
+    classification.write_text("hostname,security_domain\n", encoding="utf-8")
+    config_path = tmp_path / "collector.yaml"
+    config_path.write_text(
+        f"""
+collectors:
+  - name: networker_core
+    type: Networker
+    protocol: rest
+    enabled: true
+    schedule:
+      jobs: {{interval_minutes: 5, minute_offset: 3, second: 0}}
+      backups: {{interval_minutes: 15, minute_offset: 6, second: 0}}
+      inventory: {{interval_minutes: 60, minute_offset: 15, second: 0}}
+    base_url: https://networker.example.com:9090
+    username: rest-user
+    password: secret
+    source_networker: core
+    classification:
+      hostname_csv_path: {classification}
+""",
+        encoding="utf-8",
+    )
+
+    collector = load_config(config_path).collectors[0]
+
+    assert tuple(
+        (collection_class, schedule.interval_minutes, schedule.minute_offset)
+        for collection_class, schedule in collector.effective_schedules
+    ) == (
+        ("jobs", 5, 3),
+        ("backups", 15, 6),
+        ("inventory", 60, 15),
+    )
+    assert collector.skip_reason is None
 
 
 def test_networker_requires_basic_auth_and_rejects_ifrs(tmp_path: Path) -> None:

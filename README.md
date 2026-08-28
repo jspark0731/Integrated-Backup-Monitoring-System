@@ -31,11 +31,11 @@ Collector task를 종료하지 않습니다.
 DXi와 DD는 기존 단일 5분 schedule을 사용합니다. REST Collector는 상태성
 데이터와 inventory 데이터를 분리합니다.
 
-| Collector | Fast | Slow |
-|---|---|---|
-| i6000 | library/drive/RAS 상태, RAS ticket, slot 사용량, reachability | media, tower, I/E station, physical library inventory |
-| NetWorker | 최근 20분 job/backup, 기본 10분 | client, policy/workflow inventory, 기본 360분 |
-| ZFS | API, pool, capacity, alert/fault | project, filesystem, LUN inventory |
+| Collector | Fast / Jobs | Backups | Slow / Inventory |
+|---|---|---|---|
+| i6000 | library/drive/RAS 상태, RAS ticket, slot 사용량, reachability | - | media, tower, I/E station, physical library inventory |
+| NetWorker | 최근 10분 job, 5분 주기 | 최근 20분 backup, 15분 주기 | client, policy/workflow inventory, 60분 주기 |
+| ZFS | API, pool, capacity, alert/fault | - | project, filesystem, LUN inventory |
 
 ```yaml
 schedule:
@@ -62,15 +62,18 @@ rest:
   max_concurrency: 4
 ```
 
-NetWorker는 마스터 서버의 전역 REST 조회 부하를 제한하기 위해 예외적으로
-endpoint를 순차 호출한다. 완료 job과 backup은 각각 `endTime`, `saveTime`의
-최근 시간 구간만 조회하고 실행 중 job은 별도 필터로 조회한다.
+NetWorker는 마스터 서버의 전역 REST 조회 부하를 제한하기 위해 `jobs`,
+`backups`, `inventory`를 독립 스케줄로 실행한다. 완료 job과 backup은 각각
+`endTime`, `saveTime`의 최근 시간 구간만 조회하고 실행 중 job은 별도 필터로
+조회한다. 동일 서버의 수집은 직렬화하며 다른 수집이 실행 중이면 5분 jobs
+회차는 대기열에 쌓지 않고 건너뛴다.
 
 ```yaml
 rest:
   max_concurrency: 1
   request_spacing_seconds: 30
-  query_window_minutes: 20
+  jobs_query_window_minutes: 10
+  backups_query_window_minutes: 20
   active_jobs_query: completionStatus:Running
   field_filter: true
 ```
