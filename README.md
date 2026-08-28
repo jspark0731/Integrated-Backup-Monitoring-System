@@ -7,11 +7,10 @@ DXi, DD, i6000, NetWorker, ZFS용 이미지를 만들고 Prometheus용 실시간
 ## Architecture
 
 ```text
-DXi ── SSH CLI ────────┐
-DD ─── SNMP ───────────┤
-i6000 ─ REST ──────────┤
-NetWorker ─ REST ──────┼─> CollectorScheduler ─┬─> Prometheus /metrics
-ZFS ── REST ───────────┘                       └─> Elasticsearch bulk write
+DXi / DD / i6000 / ZFS ──> solution별 Collector Pod ─┐
+NetWorker CORE ──────────> CORE Collector Pod ───────┤
+NetWorker CHNL ──────────> CHNL Collector Pod ───────┼─> Prometheus / Elasticsearch
+NetWorker INFO ──────────> INFO Collector Pod ───────┘
 ```
 
 Kubernetes에서는 다음 7개 Deployment를 사용합니다.
@@ -55,7 +54,8 @@ schedule:
 
 기존 `schedule.interval_minutes` 형식과 `schedule_second`도 호환됩니다. 단일
 schedule을 사용하면 기존과 같이 해당 Collector의 전체 데이터를 수집합니다.
-`POST /collectors/run-once`는 설정된 fast와 slow 수집을 모두 실행합니다.
+`POST /collectors/run-once`는 해당 Pod에 설정된 모든 수집 클래스를
+순차 실행합니다.
 
 REST 요청은 application lifespan 동안 `httpx.AsyncClient` connection pool을
 재사용합니다. 독립 endpoint는 병렬 호출하며 기본 동시 요청 수는 다음처럼
@@ -105,9 +105,10 @@ Prometheus는 장비 상태, 용량, job 수와 같은 즉시 갱신되는 숫�
 | NetWorker job-run analytics | `NW-{DOMAIN}-JOB-RUN-{RUN-YYYY-MM}` |
 | NetWorker backup events | `NW-{DOMAIN}-BACKUP-{SAVE-YYYY-MM}` |
 
-CURRENT 문서는 `{collector}:current` ID로 overwrite됩니다. slow inventory
-수집은 RAW와 derived 데이터만 기록하고 CURRENT 운영 상태를 덮어쓰지
-않습니다. 기존 일자별 인덱스는 자동 reindex하거나 삭제하지 않습니다.
+CURRENT 문서는 `{collector}:current` ID로 overwrite됩니다. NetWorker
+inventory와 backups 수집은 RAW와 derived 데이터만 기록하고 jobs가 기록한
+CURRENT 운영 상태를 덮어쓰지 않습니다. 기존 일자별 인덱스는 자동
+reindex하거나 삭제하지 않습니다.
 
 NetWorker job은 기존 `job` derived 문서와 함께 분석용 `job-run` 문서도
 기록합니다. `job-run.@timestamp`는 실제 job 이벤트 시각이고 `observed_at`은
@@ -135,7 +136,7 @@ Elasticsearch index template으로 적용해야 한다.
 - `GET /metrics`
 
 `GET /collectors`는 기존 `schedule`, `last_result` 필드와 함께
-`schedules`, `last_results`의 fast/slow 상태를 제공합니다.
+`schedules`, `last_results`에서 설정된 수집 클래스별 상태를 제공합니다.
 
 ## Local Run
 
@@ -171,6 +172,23 @@ docker build --target zfs -t backup-dashboard-collector-zfs:latest .
 ConfigMap의 host, endpoint, schedule 등을 운영 값으로 바꾸고 manifest가
 참조하는 Secret을 생성한 다음 배포합니다.
 
+NetWorker manifest는 서버별로 분리되어 있습니다.
+
+- `k8s/networker-core.yaml`
+- `k8s/networker-chnl.yaml`
+- `k8s/networker-info.yaml`
+
+세 Deployment는 `backup-dashboard-collector-networker-secrets` 하나를
+공유하지만 각 manifest의 `secret.items`가 자기 서버의 CA·username·password만
+mount합니다.
+
+각 NetWorker ConfigMap의 `hostname_domain.csv`는 DNS 설정이 아니라 REST
+응답의 backup client hostname을 `core`, `chnl`, `info`로 분류하는
+매핑입니다. 해당 NetWorker 마스터가 반환할 수 있는 모든 client hostname을
+포함해야 합니다. 여러 마스터가 같은 client들을 반환할 수 있다면 세
+ConfigMap의 CSV를 동일한 전체 목록으로 유지합니다. 마스터 서버 접속용 이름
+해석은 각 Deployment의 `hostAliases`가 담당합니다.
+
 ```bash
 kubectl apply -k k8s
 ```
@@ -185,9 +203,9 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-테스트는 schedule 호환성, fast/slow 실행, scheduler 예외 복구, REST
-connection reuse·동시성·부분 실패, Elasticsearch 라우팅, NetWorker 단일
-Deployment와 security-domain 분류를 포함합니다.
+테스트는 schedule 호환성, 클래스별 실행, scheduler 예외 복구, REST
+connection reuse·동시성·부분 실패, Elasticsearch 라우팅, NetWorker 서버별
+Deployment와 공용 Secret key 격리, security-domain 분류를 포함합니다.
 
 ## Collector Documentation
 
