@@ -639,6 +639,36 @@ def test_networker_rest_parser_normalizes_job_phase_three_fields() -> None:
     assert running["duration_seconds"] is None
 
 
+def test_networker_rest_parser_normalizes_backup_phase_four_fields() -> None:
+    parsed = parse_networker_rest_payload(
+        {
+            "backups": {
+                "backups": [
+                    {
+                        "id": "backup-42",
+                        "clientHostname": "server01",
+                        "name": "/data",
+                        "level": "Full",
+                        "saveTime": "2026-08-31T15:20:00+09:00",
+                        "completionTime": "2026-08-31T06:30:00Z",
+                        "size": {"unit": "GiB", "value": 1.5},
+                    }
+                ]
+            }
+        },
+        server_name="networker_core",
+    )
+
+    backup = parsed["backups"][0]
+    assert backup["backup_id"] == "backup-42"
+    assert backup["save_set"] == "/data"
+    assert backup["save_time"] == "2026-08-31T06:20:00+00:00"
+    assert backup["completion_time"] == "2026-08-31T06:30:00+00:00"
+    assert backup["size_raw"] == 1.5
+    assert backup["size_unit_raw"] == "GiB"
+    assert backup["size_bytes"] == 1_610_612_736
+
+
 def test_zfs_rest_parser_extracts_storage_summary_values() -> None:
     parsed = parse_zfs_rest_payload(
         {

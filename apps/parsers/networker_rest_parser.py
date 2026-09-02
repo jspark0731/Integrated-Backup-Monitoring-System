@@ -148,7 +148,11 @@ def _normalize_backup(item: dict[str, Any], server: str, source_networker: str) 
     attributes = _attributes(item.get("attributes"))
     policy = _strip_policy_suffix(attributes.get("*policy name") or attributes.get("policy name") or "")
     workflow = _strip_policy_suffix(attributes.get("*policy workflow name") or attributes.get("policy workflow name") or "")
-    size_bytes = _size_bytes(item.get("size"))
+    size = item.get("size")
+    size_raw = size.get("value") if isinstance(size, dict) else size
+    size_unit_raw = _string(size.get("unit")) if isinstance(size, dict) else ""
+    size_bytes = _size_bytes(size)
+    save_set = _string(item.get("name"))
 
     return {
         "server": server,
@@ -159,13 +163,16 @@ def _normalize_backup(item: dict[str, Any], server: str, source_networker: str) 
         "policy_name": policy,
         "workflow_name": workflow,
         "group": attributes.get("group"),
-        "name": _string(item.get("name")),
+        "name": save_set,
+        "save_set": save_set,
         "type": _string(item.get("type")),
         "level": _string(item.get("level")),
-        "save_time": item.get("saveTime"),
-        "completion_time": item.get("completionTime"),
-        "retention_time": item.get("retentionTime"),
+        "save_time": _isoformat(_parse_datetime(item.get("saveTime"))),
+        "completion_time": _isoformat(_parse_datetime(item.get("completionTime"))),
+        "retention_time": _isoformat(_parse_datetime(item.get("retentionTime"))),
         "file_count": item.get("fileCount"),
+        "size_raw": size_raw,
+        "size_unit_raw": size_unit_raw,
         "size_bytes": size_bytes,
         "instances": item.get("instances") or [],
     }
@@ -465,24 +472,28 @@ def _isoformat(value: datetime | None) -> str | None:
 
 def _size_bytes(value: Any) -> int | None:
     if isinstance(value, dict):
-        number = _int(value.get("value"))
+        number = _number(value.get("value"))
         unit = _string(value.get("unit")).lower()
-        if number is None:
-            return None
-        multipliers = {
-            "byte": 1,
-            "bytes": 1,
-            "kb": 1000,
-            "kib": 1024,
-            "mb": 1000**2,
-            "mib": 1024**2,
-            "gb": 1000**3,
-            "gib": 1024**3,
-            "tb": 1000**4,
-            "tib": 1024**4,
-        }
-        return int(number * multipliers.get(unit, 1))
-    return _int(value)
+    else:
+        number = _number(value)
+        unit = ""
+    if number is None:
+        return None
+    multipliers = {
+        "": 1,
+        "byte": 1,
+        "bytes": 1,
+        "kb": 1000,
+        "kib": 1024,
+        "mb": 1000**2,
+        "mib": 1024**2,
+        "gb": 1000**3,
+        "gib": 1024**3,
+        "tb": 1000**4,
+        "tib": 1024**4,
+    }
+    multiplier = multipliers.get(unit)
+    return int(number * multiplier) if multiplier is not None else None
 
 
 def _resource_id(item: dict[str, Any]) -> str:
@@ -530,6 +541,13 @@ def _string(value: Any) -> str:
 def _int(value: Any) -> int | None:
     try:
         return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return float(str(value).strip())
     except (TypeError, ValueError):
         return None
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
@@ -51,13 +52,17 @@ def _iter_networker_backup_documents(
     for backup in backups:
         if not isinstance(backup, dict):
             continue
-        backup_id = _string(backup.get("backup_id"))
-        event_time = _parse_datetime(backup.get("save_time")) or _parse_datetime(
-            backup.get("completion_time")
+        completion_time = _parse_datetime(backup.get("completion_time"))
+        event_time = completion_time or _parse_datetime(backup.get("save_time"))
+        backup_id, identity_source = _networker_backup_identity(
+            backup,
+            completion_time,
         )
         if not backup_id or event_time is None:
             continue
         record = backup | {
+            "backup_document_id": backup_id,
+            "backup_identity_source": identity_source,
             "event_time": _isoformat(event_time),
             "backup_month": event_time.strftime("%Y-%m"),
         }
@@ -73,6 +78,30 @@ def _iter_networker_backup_documents(
         document["index_month"] = record["backup_month"]
         document["derived_id"] = f"{document['collector']}:backup:{backup_id}"
         yield document
+
+
+def _networker_backup_identity(
+    backup: dict[str, Any],
+    completion_time: datetime | None,
+) -> tuple[str, str]:
+    backup_id = _string(backup.get("backup_id"))
+    if backup_id:
+        return backup_id, "backup_id"
+
+    client_name = _string(backup.get("client_name")).lower().rstrip(".")
+    save_set = _string(backup.get("save_set")) or _string(backup.get("name"))
+    if not client_name or not save_set or completion_time is None:
+        return "", ""
+
+    identity = "\0".join(
+        (
+            client_name,
+            save_set,
+            _isoformat(completion_time) or "",
+        )
+    )
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    return f"fallback:{digest}", "client_save_set_completion_time"
 
 
 def _iter_networker_job_run_documents(

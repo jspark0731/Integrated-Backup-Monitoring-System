@@ -155,7 +155,7 @@ async def test_networker_uses_basic_auth_without_bearer_token() -> None:
         'endTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
     )
     assert requests[1][1]["q"] == (
-        'saveTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
+        'completionTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
     )
     assert all("fl" in params for _, params in requests)
     assert authorization_headers
@@ -236,7 +236,7 @@ async def test_networker_uses_class_specific_endpoints_and_windows() -> None:
         'endTime:["2026-08-28T12:20:00" TO "2026-08-28T12:30:00"]'
     )
     assert requests[1][1]["q"] == (
-        'saveTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
+        'completionTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
     )
     assert jobs["_query_window"]["minutes"] == 10
     assert backups["_query_window"]["minutes"] == 20

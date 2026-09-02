@@ -103,7 +103,7 @@ Prometheus는 장비 상태, 용량, job 수와 같은 즉시 갱신되는 숫�
 | NetWorker current | `NW-OPS-CURRENT-{SOURCE}` |
 | NetWorker derived | `NW-{DOMAIN}-{ENTITY}-YYYY-MM` |
 | NetWorker job-run analytics | `NW-{DOMAIN}-JOB-RUN-{RUN-YYYY-MM}` |
-| NetWorker backup events | `NW-{DOMAIN}-BACKUP-{SAVE-YYYY-MM}` |
+| NetWorker backup events | `NW-{DOMAIN}-BACKUP-{COMPLETION-YYYY-MM}` |
 
 CURRENT 문서는 `{collector}:current` ID로 overwrite됩니다. NetWorker
 inventory와 backups 수집은 RAW와 derived 데이터만 기록하고 jobs가 기록한

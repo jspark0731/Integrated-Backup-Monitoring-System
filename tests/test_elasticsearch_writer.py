@@ -229,6 +229,56 @@ def test_networker_backup_action_uses_event_month_and_stable_id() -> None:
     assert backup_action["_id"] == "networker_core:backup:backup-42"
 
 
+def test_networker_backup_action_uses_stable_fallback_id() -> None:
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+
+    def backup_action(client_name: str, collected_at: datetime) -> dict:
+        result = CollectionResult(
+            collector="networker_core",
+            target_type="Networker",
+            protocol="rest",
+            collected_at=collected_at,
+            ok=True,
+            payload={
+                "summary": {"source_networker": "core"},
+                "backups": [
+                    {
+                        "backup_id": "",
+                        "client_name": client_name,
+                        "save_set": "/data",
+                        "completion_time": "2026-06-30T23:59:00Z",
+                        "source_networker": "core",
+                        "security_domain": "core",
+                    }
+                ],
+            },
+        )
+        return next(
+            action
+            for action in writer._actions_for_result(result)
+            if action["_source"].get("document_type") == "backup"
+        )
+
+    first = backup_action(
+        "SERVER01.",
+        datetime(2026, 7, 1, tzinfo=timezone.utc),
+    )
+    repeated = backup_action(
+        "server01",
+        datetime(2026, 7, 2, tzinfo=timezone.utc),
+    )
+
+    assert first["_id"] == repeated["_id"]
+    assert first["_id"].startswith("networker_core:backup:fallback:")
+    assert first["_source"]["record_id"].startswith("fallback:")
+    assert (
+        first["_source"]["payload"]["backup_identity_source"]
+        == "client_save_set_completion_time"
+    )
+    assert first["_source"]["@timestamp"] == "2026-06-30T23:59:00+00:00"
+    assert first["_source"]["index_month"] == "2026-06"
+
+
 def test_networker_actions_route_ops_and_domain_entity_indexes() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     result = CollectionResult(

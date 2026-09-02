@@ -232,7 +232,13 @@ def _build_request_plan(
                     name,
                     endpoint,
                     field_params
-                    | {"q": _time_range_query("saveTime", window_start, window_end)},
+                    | {
+                        "q": _time_range_query(
+                            "completionTime",
+                            window_start,
+                            window_end,
+                        )
+                    },
                 )
             )
             continue

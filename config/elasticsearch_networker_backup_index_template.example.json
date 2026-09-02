@@ -1,7 +1,7 @@
 {
   "index_patterns": ["nw-*-backup-*"],
   "priority": 250,
-  "version": 1,
+  "version": 2,
   "_meta": {
     "description": "NetWorker deduplicated backup event documents"
   },
@@ -27,12 +27,15 @@
         "payload": {
           "properties": {
             "backup_id": {"type": "keyword"},
+            "backup_document_id": {"type": "keyword"},
+            "backup_identity_source": {"type": "keyword"},
             "client_name": {"type": "keyword"},
             "client_id": {"type": "keyword"},
             "policy_name": {"type": "keyword"},
             "workflow_name": {"type": "keyword"},
             "group": {"type": "keyword"},
             "name": {"type": "keyword"},
+            "save_set": {"type": "keyword"},
             "type": {"type": "keyword"},
             "level": {"type": "keyword"},
             "save_time": {"type": "date"},
@@ -41,6 +44,8 @@
             "event_time": {"type": "date"},
             "backup_month": {"type": "keyword"},
             "file_count": {"type": "long"},
+            "size_raw": {"type": "double"},
+            "size_unit_raw": {"type": "keyword"},
             "size_bytes": {"type": "long"}
           }
         }
