@@ -126,7 +126,6 @@ class NetworkerRestClient:
             endpoints,
             window_start=window_start,
             window_end=window_end,
-            active_jobs_query=self.config.networker_active_jobs_query,
             field_filter=self.config.networker_field_filter,
         )
 
@@ -210,7 +209,6 @@ def _build_request_plan(
     *,
     window_start: datetime,
     window_end: datetime,
-    active_jobs_query: str | None,
     field_filter: bool,
 ) -> list[_RequestSpec]:
     plan: list[_RequestSpec] = []
@@ -219,22 +217,13 @@ def _build_request_plan(
         if name == "jobs":
             plan.append(
                 _RequestSpec(
-                    "jobs_completed",
+                    name,
                     name,
                     endpoint,
                     field_params
                     | {"q": _time_range_query("endTime", window_start, window_end)},
                 )
             )
-            if active_jobs_query:
-                plan.append(
-                    _RequestSpec(
-                        "jobs_active",
-                        name,
-                        endpoint,
-                        field_params | {"q": active_jobs_query},
-                    )
-                )
             continue
         if name == "backups":
             plan.append(
@@ -255,49 +244,7 @@ def _combine_responses(
     endpoints: dict[str, str],
     responses: dict[str, Any],
 ) -> dict[str, Any]:
-    payloads: dict[str, Any] = {}
-    if "jobs" in endpoints:
-        job_payloads = [
-            responses[name]
-            for name in ("jobs_completed", "jobs_active")
-            if name in responses
-        ]
-        if job_payloads:
-            payloads["jobs"] = _merge_collection_payloads(job_payloads, "jobs")
-    for name in endpoints:
-        if name != "jobs" and name in responses:
-            payloads[name] = responses[name]
-    return payloads
-
-
-def _merge_collection_payloads(payloads: list[Any], key: str) -> dict[str, Any]:
-    merged: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for payload in payloads:
-        if isinstance(payload, dict):
-            values = payload.get(key)
-        else:
-            values = payload
-        if not isinstance(values, list):
-            continue
-        for item in values:
-            if not isinstance(item, dict):
-                continue
-            identity = _record_identity(item)
-            if identity and identity in seen:
-                continue
-            if identity:
-                seen.add(identity)
-            merged.append(item)
-    return {key: merged}
-
-
-def _record_identity(item: dict[str, Any]) -> str:
-    for key in ("id", "jobId", "resourceId"):
-        value = item.get(key)
-        if value is not None and str(value).strip():
-            return f"{key}:{value}"
-    return ""
+    return {name: responses[name] for name in endpoints if name in responses}
 
 
 def _time_range_query(field: str, start: datetime, end: datetime) -> str:

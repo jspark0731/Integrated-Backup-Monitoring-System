@@ -113,7 +113,6 @@ def test_networker_has_one_workload_per_server() -> None:
             "request_spacing_seconds": 30,
             "jobs_query_window_minutes": 10,
             "backups_query_window_minutes": 20,
-            "active_jobs_query": "completionStatus:Running",
             "field_filter": True,
         }
 

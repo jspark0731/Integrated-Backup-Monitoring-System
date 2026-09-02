@@ -97,7 +97,6 @@ class CollectorConfig:
     networker_query_window_minutes: int = 20
     networker_jobs_query_window_minutes: int = 10
     networker_backups_query_window_minutes: int = 20
-    networker_active_jobs_query: str | None = "completionStatus:Running"
     networker_field_filter: bool = True
     commands: dict[str, str] = field(default_factory=dict)
     ssh_key_path: str | None = None
@@ -335,9 +334,6 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         ),
         networker_backups_query_window_minutes=int(
             rest.get("backups_query_window_minutes", rest.get("query_window_minutes", 20))
-        ),
-        networker_active_jobs_query=_optional(
-            rest.get("active_jobs_query", "completionStatus:Running")
         ),
         networker_field_filter=bool(rest.get("field_filter", True)),
         commands=dict(raw.get("commands", {})),

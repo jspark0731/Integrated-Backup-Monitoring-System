@@ -255,7 +255,6 @@ collectors:
       request_spacing_seconds: 30
       jobs_query_window_minutes: 10
       backups_query_window_minutes: 20
-      active_jobs_query: completionStatus:Running
       field_filter: true
 """,
         encoding="utf-8",
@@ -267,7 +266,6 @@ collectors:
     assert collector.rest_request_spacing_seconds == 30
     assert collector.networker_jobs_query_window_minutes == 10
     assert collector.networker_backups_query_window_minutes == 20
-    assert collector.networker_active_jobs_query == "completionStatus:Running"
     assert collector.networker_field_filter
     assert collector.skip_reason is None
 
