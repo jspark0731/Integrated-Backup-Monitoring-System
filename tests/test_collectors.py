@@ -588,6 +588,57 @@ def test_networker_rest_parser_extracts_backup_summary_values() -> None:
     assert parsed["monthly_report"][0]["client_count"] == 2
 
 
+def test_networker_rest_parser_normalizes_job_phase_three_fields() -> None:
+    parsed = parse_networker_rest_payload(
+        {
+            "jobs": {
+                "jobs": [
+                    {
+                        "id": "job-failed",
+                        "state": "Completed",
+                        "completionStatus": "Failed",
+                        "exitCode": 0,
+                        "startTime": "2026-08-31T15:20:00+09:00",
+                        "endTime": "2026-08-31T06:30:00Z",
+                    },
+                    {
+                        "id": "job-canceled",
+                        "state": "Completed",
+                        "completionStatus": "Canceled",
+                        "exitCode": 1,
+                        "startTime": 1788157200000,
+                        "endTime": 1788157260000,
+                    },
+                    {
+                        "id": "job-running",
+                        "state": "Running",
+                        "startTime": "2026-08-31T06:30:00Z",
+                    },
+                ]
+            }
+        },
+        server_name="networker_core",
+    )
+
+    failed, canceled, running = parsed["jobs"]
+    assert failed["state_raw"] == "Completed"
+    assert failed["completion_status"] == "Failed"
+    assert failed["status_raw"] == "Failed"
+    assert failed["status"] == "failed"
+    assert failed["status_normalized"] == "failed"
+    assert failed["start_time"] == "2026-08-31T06:20:00+00:00"
+    assert failed["end_time"] == "2026-08-31T06:30:00+00:00"
+    assert failed["duration_seconds"] == 600
+
+    assert canceled["status_raw"] == "Canceled"
+    assert canceled["status_normalized"] == "canceled"
+    assert canceled["duration_seconds"] == 60
+
+    assert running["status_normalized"] == "running"
+    assert running["end_time"] is None
+    assert running["duration_seconds"] is None
+
+
 def test_zfs_rest_parser_extracts_storage_summary_values() -> None:
     parsed = parse_zfs_rest_payload(
         {

@@ -44,9 +44,17 @@ def parse_networker_rest_payload(
 
 
 def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:
-    state = _string(item.get("state")) or _string(item.get("completionStatus"))
+    state_raw = _string(item.get("state"))
+    completion_status = _string(item.get("completionStatus"))
+    state = state_raw or completion_status
+    status_raw = completion_status or state_raw
     exit_code = _int(item.get("exitCode"))
-    status = _job_status(state, exit_code)
+    status = _job_status(completion_status, state_raw, exit_code)
+    start_time = _parse_datetime(item.get("startTime"))
+    end_time = _parse_datetime(item.get("endTime"))
+    duration_seconds = None
+    if start_time is not None and end_time is not None and end_time >= start_time:
+        duration_seconds = int((end_time - start_time).total_seconds())
     policy = _policy_from_text(_string(item.get("policyName")) or _string(item.get("policy")) or _string(item.get("name")))
 
     return {
@@ -56,14 +64,19 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
         "name": _string(item.get("name")),
         "type": _string(item.get("type")),
         "state": state,
+        "state_raw": state_raw,
+        "completion_status": completion_status,
+        "status_raw": status_raw,
         "status": status,
+        "status_normalized": status,
         "exit_code": exit_code,
         "policy_name": policy,
         "workflow_name": _string(item.get("workflowName")) or _string(item.get("workflow")),
         "client_name": _string(item.get("clientName")) or _string(item.get("clientHostname")) or _string(item.get("runOnHost")),
         "run_on_host": _string(item.get("runOnHost")),
-        "start_time": item.get("startTime"),
-        "end_time": item.get("endTime"),
+        "start_time": _isoformat(start_time),
+        "end_time": _isoformat(end_time),
+        "duration_seconds": duration_seconds,
         "stopped": item.get("stopped"),
         "root_parent_job_id": item.get("rootParentJobId"),
         "parent_job_id": item.get("parentJobId"),
@@ -387,17 +400,67 @@ def _attributes(value: Any) -> dict[str, str]:
     return result
 
 
-def _job_status(state: str, exit_code: int | None) -> str:
-    normalized = state.lower()
-    if normalized in {"running", "active", "queued", "pending"}:
+def _job_status(
+    completion_status: str,
+    state: str,
+    exit_code: int | None,
+) -> str:
+    completion = completion_status.lower()
+    normalized_state = state.lower()
+    if completion in {"running", "active", "queued", "pending"}:
         return "running"
+    if completion in {"canceled", "cancelled", "aborted"}:
+        return "canceled"
+    if completion in {"completed", "succeeded", "success"}:
+        return "success"
+    if completion in {"failed", "failure"}:
+        return "failed"
+    if normalized_state in {"running", "active", "queued", "pending"}:
+        return "running"
+    if normalized_state in {"canceled", "cancelled", "aborted"}:
+        return "canceled"
+    if normalized_state in {"failed", "failure"}:
+        return "failed"
     if exit_code is not None:
         return "success" if exit_code == 0 else "failed"
-    if normalized in {"completed", "succeeded", "success"}:
+    if normalized_state in {"completed", "succeeded", "success"}:
         return "success"
-    if normalized in {"failed", "aborted", "canceled", "cancelled"}:
-        return "failed"
     return "unknown"
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, (int, float)):
+        try:
+            parsed = _datetime_from_epoch(float(value))
+        except (ValueError, OverflowError, OSError):
+            return None
+    else:
+        text = _string(value)
+        if not text:
+            return None
+        try:
+            parsed = _datetime_from_epoch(float(text))
+        except (ValueError, OverflowError, OSError):
+            normalized = f"{text[:-1]}+00:00" if text.endswith(("Z", "z")) else text
+            try:
+                parsed = datetime.fromisoformat(normalized)
+            except ValueError:
+                return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _datetime_from_epoch(value: float) -> datetime:
+    seconds = value / 1000 if abs(value) >= 100_000_000_000 else value
+    return datetime.fromtimestamp(seconds, tz=timezone.utc)
+
+
+def _isoformat(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
 
 
 def _size_bytes(value: Any) -> int | None:

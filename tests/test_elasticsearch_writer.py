@@ -366,6 +366,38 @@ def test_networker_job_run_uses_event_time_duration_and_stable_id() -> None:
     assert job_run["payload"]["outcome"] == "success"
 
 
+def test_networker_job_run_prefers_normalized_status() -> None:
+    raw_document = {
+        "@timestamp": "2026-07-01T00:15:00+00:00",
+        "collector": "networker_core",
+        "target_type": "Networker",
+        "payload": {
+            "jobs": [
+                {
+                    "job_id": "job-canceled",
+                    "status": "failed",
+                    "status_raw": "Canceled",
+                    "status_normalized": "canceled",
+                    "start_time": "2026-07-01T00:00:00+00:00",
+                    "end_time": "2026-07-01T00:10:00+00:00",
+                    "source_networker": "core",
+                    "security_domain": "core",
+                }
+            ]
+        },
+    }
+
+    documents = build_derived_documents(raw_document)
+    job_run = next(
+        document for document in documents if document["document_type"] == "job-run"
+    )
+
+    assert job_run["derived_id"] == "networker_core:job-run:job-canceled"
+    assert job_run["payload"]["status_raw"] == "Canceled"
+    assert job_run["payload"]["status_normalized"] == "canceled"
+    assert job_run["payload"]["outcome"] == "canceled"
+
+
 def test_networker_job_run_routes_by_start_month_without_changing_legacy_job() -> None:
     writer = ElasticsearchWriter(ElasticsearchConfig())
     result = CollectionResult(

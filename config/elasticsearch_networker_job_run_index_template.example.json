@@ -1,7 +1,7 @@
 {
   "index_patterns": ["nw-*-job-run-*"],
   "priority": 250,
-  "version": 1,
+  "version": 2,
   "_meta": {
     "description": "NetWorker job-run analytics documents"
   },
@@ -30,7 +30,11 @@
             "name": {"type": "keyword"},
             "type": {"type": "keyword"},
             "state": {"type": "keyword"},
+            "state_raw": {"type": "keyword"},
+            "completion_status": {"type": "keyword"},
+            "status_raw": {"type": "keyword"},
             "status": {"type": "keyword"},
+            "status_normalized": {"type": "keyword"},
             "outcome": {"type": "keyword"},
             "exit_code": {"type": "integer"},
             "policy_name": {"type": "keyword"},

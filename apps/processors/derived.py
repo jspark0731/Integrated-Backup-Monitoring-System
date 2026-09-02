@@ -109,7 +109,11 @@ def _job_run_record(job: dict[str, Any]) -> dict[str, Any] | None:
     job_id = _string(job.get("job_id"))
     start_time = _parse_datetime(job.get("start_time"))
     end_time = _parse_datetime(job.get("end_time"))
-    status = _string(job.get("status")).lower() or "unknown"
+    status = (
+        _string(job.get("status_normalized")).lower()
+        or _string(job.get("status")).lower()
+        or "unknown"
+    )
     event_time = start_time if status == "running" else end_time or start_time
 
     # A stable ID and event time are required to avoid duplicate analytical rows.
