@@ -27,8 +27,8 @@ collectors:
         minute_offset: 6
         second: 0
       inventory:
-        interval_minutes: 60
-        minute_offset: 15
+        interval_minutes: 1440
+        minute_offset: 195
         second: 0
     base_url: networker_core_base_url_TO_BE_FILLED
     method: GET
@@ -61,8 +61,8 @@ collectors:
         minute_offset: 9
         second: 20
       inventory:
-        interval_minutes: 60
-        minute_offset: 18
+        interval_minutes: 1440
+        minute_offset: 198
         second: 20
     base_url: networker_chnl_base_url_TO_BE_FILLED
     method: GET
@@ -90,8 +90,8 @@ collectors:
         minute_offset: 12
         second: 40
       inventory:
-        interval_minutes: 60
-        minute_offset: 31
+        interval_minutes: 1440
+        minute_offset: 211
         second: 40
     base_url: networker_info_base_url_TO_BE_FILLED
     method: GET

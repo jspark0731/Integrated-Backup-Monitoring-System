@@ -46,8 +46,11 @@
             "event_time": {"type": "date"},
             "job_run_month": {"type": "keyword"},
             "duration_seconds": {"type": "long"},
+            "level": {"type": "keyword"},
+            "data_size_bytes": {"type": "long"},
             "root_parent_job_id": {"type": "keyword"},
-            "parent_job_id": {"type": "keyword"}
+            "parent_job_id": {"type": "keyword"},
+            "previous_job_id": {"type": "keyword"}
           }
         }
       }

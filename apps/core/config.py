@@ -406,7 +406,7 @@ def _parse_schedule(
                     inventory=_schedule_from_mapping(
                         schedule_raw.get("inventory") or {},
                         target_type=target_type,
-                        default_interval_minutes=60,
+                        default_interval_minutes=1440 if target_type == "Networker" else 60,
                         default_second_value=0,
                     )
                     if "inventory" in schedule_raw

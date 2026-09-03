@@ -192,7 +192,9 @@ def test_networker_raw_document_can_be_transformed_to_derived_documents() -> Non
         "backup",
     ]
     assert documents[0]["processing_mode"] == "elt"
-    assert documents[0]["derived_id"] == "networker_core:job:1:2026-06"
+    assert documents[0]["derived_id"] == "networker_core:job:1"
+    assert documents[0]["document_family"] == "job"
+    assert documents[0]["job"]["id"] == 1
     assert documents[-1]["derived_id"] == "networker_core:backup:backup-1"
     assert documents[-1]["index_month"] == "2026-06"
     assert documents[-1]["@timestamp"] == "2026-06-28T23:55:00+00:00"
@@ -411,7 +413,9 @@ def test_networker_job_run_uses_event_time_duration_and_stable_id() -> None:
     assert job_run["@timestamp"] == "2026-07-01T00:10:00+00:00"
     assert job_run["observed_at"] == "2026-07-01T00:15:00+00:00"
     assert job_run["index_month"] == "2026-06"
-    assert job_run["derived_id"] == "networker_core:job-run:job-42"
+    assert job_run["derived_id"] == "networker_core:job:job-42"
+    assert job_run["document_family"] == "job"
+    assert job_run["job"]["duration_seconds"] == 1200
     assert job_run["payload"]["duration_seconds"] == 1200
     assert job_run["payload"]["outcome"] == "success"
 
@@ -442,7 +446,7 @@ def test_networker_job_run_prefers_normalized_status() -> None:
         document for document in documents if document["document_type"] == "job-run"
     )
 
-    assert job_run["derived_id"] == "networker_core:job-run:job-canceled"
+    assert job_run["derived_id"] == "networker_core:job:job-canceled"
     assert job_run["payload"]["status_raw"] == "Canceled"
     assert job_run["payload"]["status_normalized"] == "canceled"
     assert job_run["payload"]["outcome"] == "canceled"
@@ -478,7 +482,7 @@ def test_networker_job_run_routes_by_start_month_without_changing_legacy_job() -
     assert legacy_job["_index"] == "nw-core-job-2026-07"
     assert legacy_job["_source"]["@timestamp"] == "2026-07-01T00:15:00+00:00"
     assert job_run["_index"] == "nw-core-job-run-2026-06"
-    assert job_run["_id"] == "networker_core:job-run:job-42"
+    assert job_run["_id"] == "networker_core:job:job-42"
     assert job_run["_source"]["payload"]["duration_seconds"] == 1200
 
 

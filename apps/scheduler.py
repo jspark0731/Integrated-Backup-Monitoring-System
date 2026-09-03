@@ -206,9 +206,13 @@ def seconds_until_next_run(
     current = now or datetime.now(timezone.utc)
     current = current.astimezone(timezone.utc)
 
-    minute_base = current.minute - (current.minute % schedule.interval_minutes)
+    # Anchor intervals to UTC midnight. This preserves sub-hour schedules and
+    # lets 1440 minutes represent a stable daily execution time.
+    day_start = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    elapsed_minutes = int((current - day_start).total_seconds() // 60)
+    minute_base = elapsed_minutes - (elapsed_minutes % schedule.interval_minutes)
     target_minute = minute_base + schedule.minute_offset
-    target = current.replace(minute=0, second=schedule.second, microsecond=0) + timedelta(minutes=target_minute)
+    target = day_start + timedelta(minutes=target_minute, seconds=schedule.second)
     if target <= current:
         target += timedelta(minutes=schedule.interval_minutes)
     return max(0.0, (target - current).total_seconds())

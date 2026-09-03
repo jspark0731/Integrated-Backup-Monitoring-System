@@ -158,7 +158,7 @@ async def test_networker_uses_basic_auth_without_bearer_token() -> None:
     assert requests[1][1]["q"] == (
         'saveTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
     )
-    assert all("fl" in params for _, params in requests)
+    assert all("fl" not in params for _, params in requests)
     assert authorization_headers
     assert all(value and value.startswith("Basic ") for value in authorization_headers)
     assert not any(value and value.startswith("Bearer ") for value in authorization_headers)
@@ -272,7 +272,7 @@ async def test_networker_http_400_does_not_retry_without_query() -> None:
 
     assert len(requests) == 1
     assert requests[0]["q"].startswith('saveTime:[')
-    assert "fl" in requests[0]
+    assert "fl" not in requests[0]
     assert "backups" in payloads[ERRORS_KEY]
 
 
@@ -311,7 +311,7 @@ async def test_networker_http_500_retries_only_bounded_filtered_request(
 
     assert len(requests) == 2
     assert all(params["q"].startswith('endTime:[') for params in requests)
-    assert all("fl" in params for params in requests)
+    assert all("fl" not in params for params in requests)
     assert "jobs" in payloads[ERRORS_KEY]
 
 
@@ -350,12 +350,51 @@ async def test_networker_timeout_retries_only_bounded_filtered_request(
 
     assert len(requests) == 2
     assert all(params["q"].startswith('saveTime:[') for params in requests)
-    assert all("fl" in params for params in requests)
+    assert all("fl" not in params for params in requests)
     assert "backups" in payloads[ERRORS_KEY]
 
 
 @pytest.mark.asyncio
-async def test_networker_debug_log_contains_q_and_fl(caplog) -> None:
+async def test_networker_http_429_retries_with_backoff(monkeypatch) -> None:
+    attempts = 0
+    sleeps = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            return httpx.Response(429, json={"message": "rate limited"})
+        return httpx.Response(200, json={"jobs": []})
+
+    monkeypatch.setattr("apps.clients.networker_rest_client.asyncio.sleep", fake_sleep)
+    client = NetworkerRestClient(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            base_url="https://networker.example.com:9090",
+            username="rest-user",
+            password="secret",
+            verify_tls=False,
+            retries=2,
+        )
+    )
+    client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    payloads = await client.fetch_payloads("jobs")
+    await client.close()
+
+    assert attempts == 3
+    assert sleeps == [1.0, 2.0]
+    assert "jobs" in payloads
+
+
+@pytest.mark.asyncio
+async def test_networker_debug_log_contains_q_without_fl(caplog) -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"jobs": []})
 
@@ -387,15 +426,15 @@ async def test_networker_debug_log_contains_q_and_fl(caplog) -> None:
         if record.name == "apps.clients.networker_rest_client"
     )
     assert 'endTime:["2026-08-28T12:20:00" TO "2026-08-28T12:30:00"]' in message
-    assert "fl='id,jobId" in message
+    assert "fl=None" in message
 
 
 @pytest.mark.asyncio
 async def test_networker_inventory_only_requests_clients_and_policies() -> None:
-    paths = []
+    requests = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        paths.append(request.url.path)
+        requests.append((request.url.path, dict(request.url.params)))
         if request.url.path.endswith("/clients"):
             return httpx.Response(200, json={"clients": []})
         return httpx.Response(200, json={"protectionPolicies": []})
@@ -411,6 +450,7 @@ async def test_networker_inventory_only_requests_clients_and_policies() -> None:
             password="secret",
             source_networker="core",
             verify_tls=False,
+            networker_field_filter=False,
         )
     )
     client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -418,10 +458,14 @@ async def test_networker_inventory_only_requests_clients_and_policies() -> None:
     payloads = await client.fetch_payloads("inventory")
     await client.close()
 
-    assert paths == [
+    assert [path for path, _ in requests] == [
         "/nwrestapi/v3/global/clients",
         "/nwrestapi/v3/global/protectionpolicies",
     ]
+    assert requests[0][1]["fl"] == (
+        "resourceId,hostname,clientState,operatingSystem,backupType"
+    )
+    assert "fl" not in requests[1][1]
     assert set(payloads) == {"clients", "policies"}
 
 

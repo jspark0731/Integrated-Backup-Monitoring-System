@@ -295,7 +295,7 @@ collectors:
     schedule:
       jobs: {{interval_minutes: 5, minute_offset: 3, second: 0}}
       backups: {{interval_minutes: 15, minute_offset: 6, second: 0}}
-      inventory: {{interval_minutes: 60, minute_offset: 15, second: 0}}
+      inventory: {{interval_minutes: 1440, minute_offset: 195, second: 0}}
     base_url: https://networker.example.com:9090
     username: rest-user
     password: secret
@@ -314,7 +314,7 @@ collectors:
     ) == (
         ("jobs", 5, 3),
         ("backups", 15, 6),
-        ("inventory", 60, 15),
+        ("inventory", 1440, 195),
     )
     assert collector.skip_reason is None
 

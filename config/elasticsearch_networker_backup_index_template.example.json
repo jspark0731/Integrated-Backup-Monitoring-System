@@ -33,6 +33,7 @@
             "client_id": {"type": "keyword"},
             "policy_name": {"type": "keyword"},
             "workflow_name": {"type": "keyword"},
+            "action_name": {"type": "keyword"},
             "group": {"type": "keyword"},
             "name": {"type": "keyword"},
             "save_set": {"type": "keyword"},

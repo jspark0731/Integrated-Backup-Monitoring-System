@@ -108,7 +108,7 @@ kubectl create secret generic backup-dashboard-collector-networker-secrets \
 
 운영 manifest는 NetWorker 수집을 `jobs`, `backups`, `inventory`로 분리한다.
 jobs는 5분마다 최근 10분을, backups는 15분마다 최근 20분을 조회한다.
-client/policy inventory는 60분마다 조회한다. CORE, CHNL, INFO는 서로 다른
+client/policy inventory는 24시간마다 조회한다. CORE, CHNL, INFO는 서로 다른
 minute offset과 second를 사용하며, 같은 NetWorker 서버의 수집은 동시에
 실행하지 않는다.
 

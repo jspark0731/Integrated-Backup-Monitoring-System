@@ -26,7 +26,7 @@ data:
         schedule:
           jobs: {interval_minutes: 5, minute_offset: 3, second: 0}
           backups: {interval_minutes: 15, minute_offset: 6, second: 0}
-          inventory: {interval_minutes: 60, minute_offset: 15, second: 0}
+          inventory: {interval_minutes: 1440, minute_offset: 195, second: 0}
         base_url: networker_core_base_url_TO_BE_FILLED
         username_file: /apps/secrets/networker/core/username
         password_file: /apps/secrets/networker/core/password

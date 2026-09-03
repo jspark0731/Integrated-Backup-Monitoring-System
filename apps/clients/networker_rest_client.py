@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -34,57 +35,14 @@ CLASS_ENDPOINTS = {
 }
 
 FIELD_FILTERS = {
-    "jobs": ",".join(
-        (
-            "id",
-            "jobId",
-            "name",
-            "type",
-            "state",
-            "completionStatus",
-            "exitCode",
-            "policyName",
-            "workflowName",
-            "clientName",
-            "clientHostname",
-            "runOnHost",
-            "startTime",
-            "endTime",
-            "stopped",
-            "rootParentJobId",
-            "parentJobId",
-        )
-    ),
-    "backups": ",".join(
-        (
-            "id",
-            "clientHostname",
-            "clientId",
-            "name",
-            "type",
-            "level",
-            "saveTime",
-            "completionTime",
-            "retentionTime",
-            "fileCount",
-            "size",
-            "attributes",
-        )
-    ),
+    # Keep fl off jobs/backups: NetWorker can apply it before range filtering.
     "clients": ",".join(
         (
-            "clientId",
             "resourceId",
             "hostname",
-            "name",
+            "clientState",
             "operatingSystem",
             "backupType",
-            "scheduledBackup",
-            "saveSets",
-            "protectionGroups",
-            "storageNodes",
-            "parallelism",
-            "aliases",
         )
     ),
     "policies": "name,comment,resourceId,workflows",
@@ -188,6 +146,7 @@ class NetworkerRestClient:
                 max_attempts,
             )
             try:
+                started_at = time.monotonic()
                 response = await client.get(
                     self._url(endpoint),
                     headers=headers,
@@ -195,14 +154,43 @@ class NetworkerRestClient:
                     params=params,
                 )
                 response.raise_for_status()
-                return response.json() if response.content else {}
+                payload = response.json() if response.content else {}
+                LOGGER.info(
+                    "NetWorker REST response endpoint=%s q=%r returned_items=%d elapsed_seconds=%.3f status=success",
+                    endpoint,
+                    (params or {}).get("q"),
+                    _response_item_count(payload),
+                    time.monotonic() - started_at,
+                )
+                LOGGER.debug(
+                    "NetWorker REST raw fields endpoint=%s fields=%s",
+                    endpoint,
+                    _response_field_names(payload),
+                )
+                return payload
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code < 500 or attempt == max_attempts:
+                status_code = exc.response.status_code
+                LOGGER.warning(
+                    "NetWorker REST error endpoint=%s status_code=%d params=%r response_body=%r",
+                    endpoint,
+                    status_code,
+                    params or {},
+                    _safe_response_body(exc.response),
+                )
+                if status_code != 429 and status_code < 500:
                     raise
-            except httpx.TimeoutException:
                 if attempt == max_attempts:
                     raise
-            await asyncio.sleep(RETRY_BACKOFF_SECONDS)
+            except httpx.TimeoutException as exc:
+                LOGGER.warning(
+                    "NetWorker REST timeout endpoint=%s params=%r error=%s",
+                    endpoint,
+                    params or {},
+                    exc,
+                )
+                if attempt == max_attempts:
+                    raise
+            await asyncio.sleep(RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)))
         raise RuntimeError("NetWorker REST request retry loop exited unexpectedly")
 
     def _url(self, endpoint: str) -> str:
@@ -245,7 +233,11 @@ def _build_request_plan(
 ) -> list[_RequestSpec]:
     plan: list[_RequestSpec] = []
     for name, endpoint in endpoints.items():
-        field_params = {"fl": FIELD_FILTERS[name]} if field_filter and name in FIELD_FILTERS else {}
+        field_params = {}
+        if name == "clients":
+            field_params = {"fl": FIELD_FILTERS[name]}
+        elif field_filter and name in FIELD_FILTERS:
+            field_params = {"fl": FIELD_FILTERS[name]}
         if name == "jobs":
             params = {
                 "q": _time_range_query("endTime", query_windows[name], window_end)
@@ -291,3 +283,34 @@ def _time_range_query(field: str, start: datetime, end: datetime) -> str:
 
 def _format_query_time(value: datetime) -> str:
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _response_item_count(payload: Any) -> int:
+    if isinstance(payload, list):
+        return len(payload)
+    if isinstance(payload, dict):
+        for value in payload.values():
+            if isinstance(value, list):
+                return len(value)
+    return 0
+
+
+def _response_field_names(payload: Any) -> list[str]:
+    items: list[Any] = []
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        for value in payload.values():
+            if isinstance(value, list):
+                items = value
+                break
+    first = next((item for item in items if isinstance(item, dict)), None)
+    return sorted(first) if isinstance(first, dict) else []
+
+
+def _safe_response_body(response: httpx.Response, limit: int = 2000) -> str:
+    try:
+        body = response.text
+    except Exception:
+        return "<unavailable>"
+    return body[:limit]

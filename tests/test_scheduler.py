@@ -36,6 +36,18 @@ def test_seconds_until_next_run_rejects_invalid_offset() -> None:
         seconds_until_next_run(5, 5, 0)
 
 
+def test_seconds_until_next_run_daily_uses_minutes_after_midnight() -> None:
+    now = datetime(2026, 6, 26, 2, 59, 30, tzinfo=timezone.utc)
+
+    assert seconds_until_next_run(1440, 180, 0, now) == 30
+    assert seconds_until_next_run(
+        1440,
+        180,
+        0,
+        datetime(2026, 6, 26, 3, 0, tzinfo=timezone.utc),
+    ) == 86400
+
+
 class RecordingCollector(BaseCollector):
     def __init__(self, config: CollectorConfig) -> None:
         super().__init__(config)

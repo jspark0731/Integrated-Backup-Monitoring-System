@@ -53,11 +53,17 @@ class ElasticsearchWriter:
             for action in self._iter_actions_for_result(result)
         )
         try:
-            await self._async_bulk(
+            bulk_result = await self._async_bulk(
                 self.client,
                 actions,
                 chunk_size=BULK_CHUNK_SIZE,
                 max_chunk_bytes=BULK_MAX_CHUNK_BYTES,
+            )
+            document_count = bulk_result[0] if isinstance(bulk_result, tuple) else "unknown"
+            LOGGER.info(
+                "Elasticsearch write collectors=%s document_count=%s collection_status=success",
+                [result.collector for result in results],
+                document_count,
             )
             ELASTICSEARCH_WRITE_TOTAL.labels("success").inc()
         except Exception:

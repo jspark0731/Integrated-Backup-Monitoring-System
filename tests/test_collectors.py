@@ -604,6 +604,9 @@ def test_networker_rest_parser_normalizes_job_phase_three_fields() -> None:
                         "exitCode": 0,
                         "startTime": "2026-08-31T15:20:00+09:00",
                         "endTime": "2026-08-31T06:30:00Z",
+                        "level": "Full",
+                        "dataSize": {"unit": "MiB", "value": 2},
+                        "previousJobId": "job-previous",
                     },
                     {
                         "id": "job-canceled",
@@ -633,6 +636,9 @@ def test_networker_rest_parser_normalizes_job_phase_three_fields() -> None:
     assert failed["start_time"] == "2026-08-31T06:20:00+00:00"
     assert failed["end_time"] == "2026-08-31T06:30:00+00:00"
     assert failed["duration_seconds"] == 600
+    assert failed["level"] == "Full"
+    assert failed["data_size_bytes"] == 2_097_152
+    assert failed["previous_job_id"] == "job-previous"
 
     assert canceled["status_raw"] == "Canceled"
     assert canceled["status_normalized"] == "canceled"
@@ -656,6 +662,7 @@ def test_networker_rest_parser_normalizes_backup_phase_four_fields() -> None:
                         "saveTime": "2026-08-31T15:20:00+09:00",
                         "completionTime": "2026-08-31T06:30:00Z",
                         "size": {"unit": "GiB", "value": 1.5},
+                        "actionName": "Backup",
                     }
                 ]
             }
@@ -671,6 +678,33 @@ def test_networker_rest_parser_normalizes_backup_phase_four_fields() -> None:
     assert backup["size_raw"] == 1.5
     assert backup["size_unit_raw"] == "GiB"
     assert backup["size_bytes"] == 1_610_612_736
+    assert backup["action_name"] == "Backup"
+
+
+def test_networker_rest_parser_keeps_only_client_inventory_metadata() -> None:
+    parsed = parse_networker_rest_payload(
+        {
+            "clients": {
+                "clients": [
+                    {
+                        "resourceId": {"id": "resource-1"},
+                        "hostname": "server01",
+                        "clientState": "Active",
+                        "operatingSystem": "Linux",
+                        "backupType": "Filesystem",
+                        "saveSets": ["/should/not/be/stored"],
+                    }
+                ]
+            }
+        },
+        server_name="networker_core",
+    )
+
+    client = parsed["clients"][0]
+    assert client["resource_id"] == "resource-1"
+    assert client["client_state"] == "enabled"
+    assert client["client_os_family"] == "Linux"
+    assert "save_sets" not in client
 
 
 def test_networker_failed_endpoint_counts_are_unknown_not_zero() -> None:

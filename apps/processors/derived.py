@@ -130,7 +130,7 @@ def _iter_networker_job_run_documents(
         document["@timestamp"] = record["event_time"]
         document["observed_at"] = raw_document.get("@timestamp")
         document["index_month"] = record["job_run_month"]
-        document["derived_id"] = f"{document['collector']}:job-run:{job_id}"
+        document["derived_id"] = f"{document['collector']}:job:{job_id}"
         yield document
 
 
@@ -230,13 +230,16 @@ def _iter_record_documents(
         for index, record in enumerate(records):
             if not isinstance(record, dict):
                 continue
-            yield _derived_document(
+            document = _derived_document(
                 raw_document,
                 solution=solution,
                 document_type=document_type,
                 record=record,
                 record_id=_record_id(record, id_fields, index),
             )
+            if solution == "networker" and document_type == "job" and record.get("job_id"):
+                document["derived_id"] = f"{document['collector']}:job:{record['job_id']}"
+            yield document
 
 
 def _derived_document(
@@ -249,7 +252,7 @@ def _derived_document(
 ) -> dict[str, Any]:
     collector = raw_document.get("collector")
     month = _month(raw_document.get("@timestamp"))
-    return {
+    document = {
         "@timestamp": raw_document.get("@timestamp"),
         "collector": collector,
         "device_name": raw_document.get("device_name") or collector,
@@ -265,6 +268,66 @@ def _derived_document(
         "security_domain": record.get("security_domain"),
         "payload": record,
     }
+    if solution == "networker":
+        document["document_family"] = (
+            "job" if document_type == "job-run" else document_type
+        )
+        document.update(_networker_document_fields(document_type, record))
+    return document
+
+
+def _networker_document_fields(
+    document_type: str,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    if document_type in {"job", "job-run"}:
+        return {
+            "job": {
+                "id": record.get("job_id"),
+                "name": record.get("name"),
+                "type": record.get("type"),
+                "state": record.get("state"),
+                "completion_status": record.get("completion_status"),
+                "status_normalized": record.get("status_normalized"),
+                "exit_code": record.get("exit_code"),
+                "start_time": record.get("start_time"),
+                "end_time": record.get("end_time"),
+                "duration_seconds": record.get("duration_seconds"),
+                "level": record.get("level"),
+                "data_size_bytes": record.get("data_size_bytes"),
+                "parent_job_id": record.get("parent_job_id"),
+                "root_parent_job_id": record.get("root_parent_job_id"),
+                "previous_job_id": record.get("previous_job_id"),
+            },
+            "client": {"hostname": record.get("client_hostname") or record.get("client_name")},
+            "run_on_host": record.get("run_on_host"),
+        }
+    if document_type == "backup":
+        return {
+            "backup": {
+                "id": record.get("backup_id"),
+                "save_set": record.get("save_set"),
+                "level": record.get("level"),
+                "save_time": record.get("save_time"),
+                "completion_time": record.get("completion_time"),
+                "size_bytes": record.get("size_bytes"),
+            },
+            "client": {"hostname": record.get("client_hostname") or record.get("client_name")},
+            "policy": {"name": record.get("policy_name")},
+            "workflow": {"name": record.get("workflow_name")},
+            "action": {"name": record.get("action_name")},
+        }
+    if document_type == "client":
+        return {
+            "client": {
+                "resource_id": record.get("resource_id") or record.get("client_id"),
+                "hostname": record.get("client_hostname") or record.get("client_name"),
+                "state": record.get("client_state"),
+                "backup_type": record.get("backup_type"),
+                "os": record.get("client_os"),
+            }
+        }
+    return {}
 
 
 def _record_id(record: dict[str, Any], fields: tuple[str, ...], fallback_index: int) -> str:

@@ -8,19 +8,19 @@ NETWORKER_SERVERS = {
         "second": 0,
         "jobs_offset": 3,
         "backups_offset": 6,
-        "inventory_offset": 15,
+        "inventory_offset": 195,
     },
     "chnl": {
         "second": 20,
         "jobs_offset": 1,
         "backups_offset": 9,
-        "inventory_offset": 18,
+        "inventory_offset": 198,
     },
     "info": {
         "second": 40,
         "jobs_offset": 4,
         "backups_offset": 12,
-        "inventory_offset": 31,
+        "inventory_offset": 211,
     },
 }
 ELASTICSEARCH_SECRET_KEYS = {
@@ -104,7 +104,7 @@ def test_networker_has_one_workload_per_server() -> None:
             "second": expected["second"],
         }
         assert schedule["inventory"] == {
-            "interval_minutes": 60,
+            "interval_minutes": 1440,
             "minute_offset": expected["inventory_offset"],
             "second": expected["second"],
         }

@@ -215,7 +215,7 @@ collector별 최신 운영 상태를 제공한다. fast 수집만 current를 갱
 | `@timestamp` | `datetime` | 종료된 job은 종료 시각, 실행 중 job은 시작 시각 |
 | `observed_at` | `datetime` | collector 수집 시각 |
 | `index_month` | `string` | 중복 방지를 위한 job 시작 월 |
-| `derived_id` | `string` | `{collector}:job-run:{job_id}` |
+| `derived_id` | `string` | `{collector}:job:{job_id}` |
 | `payload.outcome` | `string` | 기존 status와 병행하는 분석 결과 |
 | `payload.duration_seconds` | `integer nullable` | 종료 시각 - 시작 시각 |
 
@@ -407,11 +407,12 @@ payload
 | `source_networker`, `client_hostname`, `security_domain` | `string` |
 | `classification_status`, `classification_source` | `string` |
 | `job_id` | `any nullable` |
-| `name`, `type`, `state`, `status` | `string` |
+| `name`, `type`, `state`, `status`, `level` | `string` |
 | `exit_code` | `integer nullable` |
 | `policy_name`, `workflow_name`, `client_name`, `run_on_host` | `string` |
 | `start_time`, `end_time`, `stopped` | `any nullable` |
-| `root_parent_job_id`, `parent_job_id` | `any nullable` |
+| `duration_seconds`, `data_size_bytes` | `integer nullable` |
+| `root_parent_job_id`, `parent_job_id`, `previous_job_id` | `any nullable` |
 
 `status` 정규화 값은 `success`, `failed`, `running`, `unknown`이다.
 
@@ -421,7 +422,7 @@ payload
 |---|---|
 | `server`, `source_networker`, `backup_id`, `client_name`, `client_id` | `string` |
 | `client_hostname`, `security_domain`, `classification_status`, `classification_source` | `string` |
-| `policy_name`, `workflow_name`, `group`, `name`, `type`, `level` | `string` |
+| `policy_name`, `workflow_name`, `action_name`, `group`, `name`, `type`, `level` | `string` |
 | `save_time`, `completion_time`, `retention_time` | `any nullable` |
 | `file_count`, `size_bytes` | `integer nullable` |
 
@@ -429,13 +430,11 @@ payload
 
 | 필드 | 타입 |
 |---|---|
-| `server`, `client_id`, `client_name`, `client_os` | `string` |
+| `server`, `client_id`, `resource_id`, `client_name`, `client_state`, `client_os` | `string` |
 | `source_networker`, `client_hostname`, `security_domain` | `string` |
 | `classification_status`, `classification_source` | `string` |
 | `client_os_family` | `string` (`AIX`, `Linux`, `Windows`, `Other`, `Unknown`) |
 | `backup_type` | `string` |
-| `scheduled_backup`, `parallelism` | `any nullable` |
-| `save_sets`, `protection_groups`, `storage_nodes`, `aliases` | `array<any>` |
 
 **Policy / Workflow**
 

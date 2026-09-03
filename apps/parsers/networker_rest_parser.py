@@ -77,9 +77,12 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
         "start_time": _isoformat(start_time),
         "end_time": _isoformat(end_time),
         "duration_seconds": duration_seconds,
+        "level": _string(item.get("level")),
+        "data_size_bytes": _size_bytes(item.get("dataSize")),
         "stopped": item.get("stopped"),
         "root_parent_job_id": item.get("rootParentJobId"),
         "parent_job_id": item.get("parentJobId"),
+        "previous_job_id": item.get("previousJobId"),
     }
 
 
@@ -95,17 +98,13 @@ def _normalize_client(item: dict[str, Any], server: str, source_networker: str) 
     return {
         "server": server,
         "source_networker": source_networker,
-        "client_id": _string(item.get("clientId")) or _resource_id(item),
+        "client_id": _resource_id(item),
+        "resource_id": _resource_id(item),
         "client_name": hostname,
+        "client_state": _normalize_client_state(item.get("clientState")),
         "client_os": os_name,
         "client_os_family": _os_family(os_name),
         "backup_type": _string(item.get("backupType")),
-        "scheduled_backup": item.get("scheduledBackup"),
-        "save_sets": item.get("saveSets") or [],
-        "protection_groups": item.get("protectionGroups") or [],
-        "storage_nodes": item.get("storageNodes") or [],
-        "parallelism": item.get("parallelism"),
-        "aliases": item.get("aliases") or [],
     }
 
 
@@ -146,8 +145,9 @@ def _normalize_policies(payload: Any, server: str) -> tuple[list[dict[str, Any]]
 
 def _normalize_backup(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:
     attributes = _attributes(item.get("attributes"))
-    policy = _strip_policy_suffix(attributes.get("*policy name") or attributes.get("policy name") or "")
-    workflow = _strip_policy_suffix(attributes.get("*policy workflow name") or attributes.get("policy workflow name") or "")
+    policy = _string(item.get("policyName")) or _strip_policy_suffix(attributes.get("*policy name") or attributes.get("policy name") or "")
+    workflow = _string(item.get("workflowName")) or _strip_policy_suffix(attributes.get("*policy workflow name") or attributes.get("policy workflow name") or "")
+    action = _string(item.get("actionName")) or _strip_policy_suffix(attributes.get("*policy action name") or attributes.get("policy action name") or "")
     size = item.get("size")
     size_raw = size.get("value") if isinstance(size, dict) else size
     size_unit_raw = _string(size.get("unit")) if isinstance(size, dict) else ""
@@ -162,6 +162,7 @@ def _normalize_backup(item: dict[str, Any], server: str, source_networker: str) 
         "client_id": _string(item.get("clientId")),
         "policy_name": policy,
         "workflow_name": workflow,
+        "action_name": action,
         "group": attributes.get("group"),
         "name": save_set,
         "save_set": save_set,
@@ -522,6 +523,15 @@ def _os_family(value: str) -> str:
     if "win" in normalized:
         return "Windows"
     return "Unknown" if not value else "Other"
+
+
+def _normalize_client_state(value: Any) -> str:
+    normalized = _string(value).lower()
+    if normalized in {"enabled", "active", "online"}:
+        return "enabled"
+    if normalized in {"disabled", "inactive", "offline"}:
+        return "disabled"
+    return normalized or "unknown"
 
 
 def _first_string(*values: Any) -> str:
