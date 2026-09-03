@@ -6,7 +6,11 @@ from apps.collectors.factory import build_collector
 from apps.collectors.dd_snmp_collector import DDSnmpCollector, parse_dd_snmp_payload
 from apps.collectors.dxi_cli_collector import DXiCliCollector, parse_dxi_cli_outputs
 from apps.collectors.i6000_rest_collector import I6000RestCollector, parse_i6000_rest_payload
-from apps.collectors.networker_rest_collector import NetworkerRestCollector, parse_networker_rest_payload
+from apps.collectors.networker_rest_collector import (
+    NetworkerRestCollector,
+    _mark_failed_endpoint_counts_unknown,
+    parse_networker_rest_payload,
+)
 from apps.collectors.zfs_rest_collector import ZfsRestCollector, parse_zfs_rest_payload
 from apps.core.config import CollectorConfig
 from apps.core.metrics import (
@@ -667,6 +671,23 @@ def test_networker_rest_parser_normalizes_backup_phase_four_fields() -> None:
     assert backup["size_raw"] == 1.5
     assert backup["size_unit_raw"] == "GiB"
     assert backup["size_bytes"] == 1_610_612_736
+
+
+def test_networker_failed_endpoint_counts_are_unknown_not_zero() -> None:
+    summary = {
+        "job_count": 0,
+        "backup_count": 0,
+        "total_backup_bytes": 0,
+    }
+
+    _mark_failed_endpoint_counts_unknown(
+        summary,
+        {"jobs": "HTTPStatusError: 500", "backups": "ReadTimeout"},
+    )
+
+    assert summary["job_count"] is None
+    assert summary["backup_count"] is None
+    assert summary["total_backup_bytes"] is None
 
 
 def test_zfs_rest_parser_extracts_storage_summary_values() -> None:

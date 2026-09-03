@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -10,6 +11,10 @@ import httpx
 
 from apps.clients.rest_client import ERRORS_KEY, ReusableRestClient
 from apps.core.config import CollectionClass, CollectorConfig
+
+
+LOGGER = logging.getLogger(__name__)
+RETRY_BACKOFF_SECONDS = 1.0
 
 
 DEFAULT_ENDPOINTS = {
@@ -118,13 +123,10 @@ class NetworkerRestClient:
             collection_class,
         )
         window_end = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-        window_minutes = _query_window_minutes(self.config, collection_class)
-        window_start = window_end - timedelta(
-            minutes=window_minutes
-        )
+        query_windows = _query_windows(self.config, endpoints, window_end)
         request_plan = _build_request_plan(
             endpoints,
-            window_start=window_start,
+            query_windows=query_windows,
             window_end=window_end,
             field_filter=self.config.networker_field_filter,
         )
@@ -148,12 +150,18 @@ class NetworkerRestClient:
                 errors[request.result_name] = f"{type(exc).__name__}: {exc}"
 
         payloads = _combine_responses(endpoints, responses)
-        if any(name in endpoints for name in FAST_ENDPOINTS):
-            payloads["_query_window"] = {
-                "start": _format_query_time(window_start),
+        timed_windows = {
+            name: {
+                "start": _format_query_time(start),
                 "end": _format_query_time(window_end),
-                "minutes": window_minutes,
+                "minutes": int((window_end - start).total_seconds() / 60),
             }
+            for name, start in query_windows.items()
+        }
+        if timed_windows:
+            longest = max(timed_windows.values(), key=lambda item: item["minutes"])
+            payloads["_query_window"] = dict(longest)
+            payloads["_query_window"]["endpoints"] = timed_windows
         if errors:
             payloads[ERRORS_KEY] = errors
         return payloads
@@ -169,14 +177,33 @@ class NetworkerRestClient:
         auth: tuple[str, str] | None,
         params: dict[str, str] | None = None,
     ) -> Any:
-        response = await client.get(
-            self._url(endpoint),
-            headers=headers,
-            auth=auth,
-            params=params,
-        )
-        response.raise_for_status()
-        return response.json() if response.content else {}
+        max_attempts = max(1, self.config.retries + 1)
+        for attempt in range(1, max_attempts + 1):
+            LOGGER.debug(
+                "NetWorker REST request endpoint=%s q=%r fl=%r attempt=%d/%d",
+                endpoint,
+                (params or {}).get("q"),
+                (params or {}).get("fl"),
+                attempt,
+                max_attempts,
+            )
+            try:
+                response = await client.get(
+                    self._url(endpoint),
+                    headers=headers,
+                    auth=auth,
+                    params=params,
+                )
+                response.raise_for_status()
+                return response.json() if response.content else {}
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code < 500 or attempt == max_attempts:
+                    raise
+            except httpx.TimeoutException:
+                if attempt == max_attempts:
+                    raise
+            await asyncio.sleep(RETRY_BACKOFF_SECONDS)
+        raise RuntimeError("NetWorker REST request retry loop exited unexpectedly")
 
     def _url(self, endpoint: str) -> str:
         base_url = f"{self.config.base_url.rstrip('/')}/"
@@ -193,21 +220,26 @@ def _endpoints_for_class(
     return {name: endpoint for name, endpoint in endpoints.items() if name in selected}
 
 
-def _query_window_minutes(
+def _query_windows(
     config: CollectorConfig,
-    collection_class: CollectionClass | None,
-) -> int:
-    if collection_class == "jobs":
-        return config.networker_jobs_query_window_minutes
-    if collection_class == "backups":
-        return config.networker_backups_query_window_minutes
-    return config.networker_query_window_minutes
+    endpoints: dict[str, str],
+    window_end: datetime,
+) -> dict[str, datetime]:
+    minutes_by_endpoint = {
+        "jobs": config.networker_jobs_query_window_minutes,
+        "backups": config.networker_backups_query_window_minutes,
+    }
+    return {
+        name: window_end - timedelta(minutes=minutes_by_endpoint[name])
+        for name in endpoints
+        if name in minutes_by_endpoint
+    }
 
 
 def _build_request_plan(
     endpoints: dict[str, str],
     *,
-    window_start: datetime,
+    query_windows: dict[str, datetime],
     window_end: datetime,
     field_filter: bool,
 ) -> list[_RequestSpec]:
@@ -215,30 +247,30 @@ def _build_request_plan(
     for name, endpoint in endpoints.items():
         field_params = {"fl": FIELD_FILTERS[name]} if field_filter and name in FIELD_FILTERS else {}
         if name == "jobs":
+            params = {
+                "q": _time_range_query("endTime", query_windows[name], window_end)
+            }
+            params.update(field_params)
             plan.append(
                 _RequestSpec(
                     name,
                     name,
                     endpoint,
-                    field_params
-                    | {"q": _time_range_query("endTime", window_start, window_end)},
+                    params,
                 )
             )
             continue
         if name == "backups":
+            params = {
+                "q": _time_range_query("saveTime", query_windows[name], window_end)
+            }
+            params.update(field_params)
             plan.append(
                 _RequestSpec(
                     name,
                     name,
                     endpoint,
-                    field_params
-                    | {
-                        "q": _time_range_query(
-                            "completionTime",
-                            window_start,
-                            window_end,
-                        )
-                    },
+                    params,
                 )
             )
             continue

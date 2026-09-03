@@ -46,8 +46,9 @@ class NetworkerRestCollector(BaseCollector):
             source_networker=str(self.config.source_networker or self.name),
             classifier=self.classifier,
         )
-        self._publish_metrics(parsed["summary"], active_class)
         errors = endpoint_errors(raw)
+        _mark_failed_endpoint_counts_unknown(parsed["summary"], errors)
+        self._publish_metrics(parsed["summary"], active_class)
         return {
             "summary": parsed["summary"],
             "jobs": parsed["jobs"],
@@ -106,6 +107,17 @@ class NetworkerRestCollector(BaseCollector):
                 continue
             for policy, count in policy_counts.items():
                 metric.labels(server, policy, domain).set(count)
+
+
+def _mark_failed_endpoint_counts_unknown(
+    summary: dict[str, Any],
+    errors: dict[str, str],
+) -> None:
+    if "jobs" in errors:
+        summary["job_count"] = None
+    if "backups" in errors:
+        summary["backup_count"] = None
+        summary["total_backup_bytes"] = None
 
 
 __all__ = ["NetworkerRestCollector", "parse_networker_rest_payload"]
