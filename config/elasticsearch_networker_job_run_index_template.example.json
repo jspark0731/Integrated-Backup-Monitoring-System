@@ -1,13 +1,17 @@
 {
   "index_patterns": ["nw-*-job-run-*"],
-  "priority": 250,
-  "version": 2,
+  "priority": 400,
+  "version": 5,
+  "composed_of": ["nw-common-mappings"],
   "_meta": {
     "description": "NetWorker job-run analytics documents"
   },
   "template": {
+    "settings": {
+      "index.mapping.ignore_malformed": true
+    },
     "mappings": {
-      "dynamic": true,
+      "dynamic": false,
       "properties": {
         "@timestamp": {"type": "date"},
         "observed_at": {"type": "date"},
@@ -24,8 +28,42 @@
         "source_networker": {"type": "keyword"},
         "security_domain": {"type": "keyword"},
         "index_month": {"type": "keyword"},
-        "payload": {
+        "job": {
+          "dynamic": false,
           "properties": {
+            "id": {"type": "keyword"},
+            "name": {"type": "keyword"},
+            "type": {"type": "keyword"},
+            "state": {"type": "keyword"},
+            "completion_status": {"type": "keyword"},
+            "status_normalized": {"type": "keyword"},
+            "exit_code": {"type": "long"},
+            "start_time": {"type": "date"},
+            "end_time": {"type": "date"},
+            "duration_seconds": {"type": "long"},
+            "level": {"type": "keyword"},
+            "data_size_bytes": {"type": "long"},
+            "parent_job_id": {"type": "keyword"},
+            "root_parent_job_id": {"type": "keyword"},
+            "previous_job_id": {"type": "keyword"}
+          }
+        },
+        "client": {
+          "dynamic": false,
+          "properties": {
+            "hostname": {"type": "keyword"}
+          }
+        },
+        "run_on_host": {"type": "keyword"},
+        "payload": {
+          "dynamic": false,
+          "properties": {
+            "server": {"type": "keyword"},
+            "source_networker": {"type": "keyword"},
+            "security_domain": {"type": "keyword"},
+            "classification_status": {"type": "keyword"},
+            "classification_source": {"type": "keyword"},
+            "client_hostname": {"type": "keyword"},
             "job_id": {"type": "keyword"},
             "name": {"type": "keyword"},
             "type": {"type": "keyword"},
@@ -36,9 +74,11 @@
             "status": {"type": "keyword"},
             "status_normalized": {"type": "keyword"},
             "outcome": {"type": "keyword"},
-            "exit_code": {"type": "integer"},
+            "exit_code": {"type": "long"},
             "policy_name": {"type": "keyword"},
             "workflow_name": {"type": "keyword"},
+            "protection_group": {"type": "keyword"},
+            "workflow_run_key": {"type": "keyword"},
             "client_name": {"type": "keyword"},
             "run_on_host": {"type": "keyword"},
             "start_time": {"type": "date"},
@@ -48,6 +88,7 @@
             "duration_seconds": {"type": "long"},
             "level": {"type": "keyword"},
             "data_size_bytes": {"type": "long"},
+            "stopped": {"type": "boolean"},
             "root_parent_job_id": {"type": "keyword"},
             "parent_job_id": {"type": "keyword"},
             "previous_job_id": {"type": "keyword"}

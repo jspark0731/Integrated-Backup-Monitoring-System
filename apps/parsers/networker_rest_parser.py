@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+import shlex
 from typing import Any
 
 from apps.classifiers.hostname import HostnameClassifier
@@ -55,14 +56,19 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
     duration_seconds = None
     if start_time is not None and end_time is not None and end_time >= start_time:
         duration_seconds = int((end_time - start_time).total_seconds())
-    policy = _policy_from_text(_string(item.get("policyName")) or _string(item.get("policy")) or _string(item.get("name")))
+    job_type = _string(item.get("type"))
+    is_save_job = job_type.lower() == "save job"
+    # runOnHost identifies a backup client only for the verified save-job type.
+    client_name = _string(item.get("clientName")) or _string(item.get("clientHostname"))
+    if not client_name and is_save_job:
+        client_name = _string(item.get("runOnHost"))
 
     return {
         "server": server,
         "source_networker": source_networker,
         "job_id": item.get("id") or item.get("jobId"),
         "name": _string(item.get("name")),
-        "type": _string(item.get("type")),
+        "type": job_type,
         "state": state,
         "state_raw": state_raw,
         "completion_status": completion_status,
@@ -70,9 +76,10 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
         "status": status,
         "status_normalized": status,
         "exit_code": exit_code,
-        "policy_name": policy,
-        "workflow_name": _string(item.get("workflowName")) or _string(item.get("workflow")),
-        "client_name": _string(item.get("clientName")) or _string(item.get("clientHostname")) or _string(item.get("runOnHost")),
+        "policy_name": _string(item.get("policyName")),
+        "workflow_name": _string(item.get("workflowName")),
+        "protection_group": _protection_group(item.get("command")) if is_save_job else "",
+        "client_name": client_name,
         "run_on_host": _string(item.get("runOnHost")),
         "start_time": _isoformat(start_time),
         "end_time": _isoformat(end_time),
@@ -84,6 +91,28 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
         "parent_job_id": item.get("parentJobId"),
         "previous_job_id": item.get("previousJobId"),
     }
+
+
+def _protection_group(command: Any) -> str:
+    """Read save -g as a Protection Group, never as a workflow or policy.
+
+    Use shell-style quoted tokens (including quoted Windows command paths).
+    This tokenizes text only and never executes a shell command.
+    """
+    if not isinstance(command, str) or not command.strip():
+        return ""
+    lexer = shlex.shlex(command, posix=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    try:
+        tokens = list(lexer)
+    except ValueError:  # Unclosed quotes: do not guess a group from partial input.
+        return ""
+    positions = [index for index, token in enumerate(tokens) if token == "-g"]
+    if len(positions) != 1 or positions[0] + 1 >= len(tokens):
+        return ""
+    value = tokens[positions[0] + 1].strip()
+    return value if value and not value.startswith("-") else ""
 
 
 def _normalize_client(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:

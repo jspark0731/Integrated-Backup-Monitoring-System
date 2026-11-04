@@ -156,6 +156,7 @@ def _job_run_record(job: dict[str, Any]) -> dict[str, Any] | None:
     run_month_source = start_time or event_time
     return job | {
         "job_id": job_id,
+        "workflow_run_key": _workflow_run_key(job),
         "start_time": _isoformat(start_time),
         "end_time": _isoformat(end_time),
         "event_time": _isoformat(event_time),
@@ -163,6 +164,28 @@ def _job_run_record(job: dict[str, Any]) -> dict[str, Any] | None:
         "duration_seconds": duration_seconds,
         "outcome": status,
     }
+
+
+def _workflow_run_key(job: dict[str, Any]) -> str:
+    """Identify a workflow run using only verified type and positive API IDs."""
+    source = _string(job.get("source_networker")).lower()
+    if not source or ":" in source or any(char.isspace() for char in source):
+        return ""
+    job_type = _string(job.get("type")).lower()
+    if job_type == "workflow job":
+        value = job.get("job_id")
+    elif job_type in {"backup action job", "save job"}:
+        value = job.get("root_parent_job_id")
+    else:
+        return ""
+    # NetWorker list API IDs are positive decimal integers. Reject ambiguous
+    # booleans, fractional/negative IDs and placeholders without changing originals.
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return ""
+    identity = str(value).strip()
+    if not identity or not identity.isascii() or not identity.isdecimal() or not identity.strip("0"):
+        return ""
+    return f"{source}:{identity}"
 
 
 def _i6000_documents(raw_document: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]]:

@@ -580,9 +580,10 @@ def test_networker_rest_parser_extracts_backup_summary_values() -> None:
     assert parsed["summary"]["client_count"] == 2
     assert parsed["summary"]["workflow_count"] == 2
     assert parsed["summary"]["total_backup_bytes"] == 1000
-    assert parsed["summary"]["job_success_count_by_policy"]["Filesystem"] == 1
-    assert parsed["summary"]["job_failed_count_by_policy"]["Filesystem"] == 1
-    assert parsed["summary"]["job_running_count_by_policy"]["Database"] == 1
+    # Job names are not policy evidence; absent API policyName stays unknown.
+    assert parsed["summary"]["job_success_count_by_policy"]["unknown"] == 1
+    assert parsed["summary"]["job_failed_count_by_policy"]["unknown"] == 1
+    assert parsed["summary"]["job_running_count_by_policy"]["unknown"] == 1
     assert parsed["summary"]["query_window"]["minutes"] == 20
     assert parsed["jobs"][2]["job_id"] == 3
     assert parsed["jobs"][2]["status"] == "running"
