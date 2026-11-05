@@ -394,11 +394,6 @@ async def test_networker_classes_share_request_cooldown(monkeypatch) -> None:
 async def test_three_networker_collectors_run_independently_in_one_scheduler(
     tmp_path,
 ) -> None:
-    classification = tmp_path / "hostname_domain.csv"
-    classification.write_text(
-        "hostname,security_domain\n",
-        encoding="utf-8",
-    )
 
     class FailingPayloadCollector(RecordingCollector):
         async def _collect_payload(self) -> dict:
@@ -417,7 +412,6 @@ async def test_three_networker_collectors_run_independently_in_one_scheduler(
             username="rest-user",
             password="secret",
             source_networker=source,
-            hostname_csv_path=str(classification),
         )
         collector_type = FailingPayloadCollector if source == "core" else RecordingCollector
         collectors.append(collector_type(config))

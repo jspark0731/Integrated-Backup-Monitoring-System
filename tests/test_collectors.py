@@ -273,8 +273,6 @@ def test_i6000_snmp_collector_is_rejected() -> None:
 
 
 def test_networker_rest_collector_uses_default_endpoint_map(tmp_path: Path) -> None:
-    hostname_csv = tmp_path / "hostname_domain.csv"
-    hostname_csv.write_text("hostname,security_domain\nclient01,core\n", encoding="utf-8")
     collector = build_collector(
         CollectorConfig(
             name="networker_core",
@@ -286,7 +284,6 @@ def test_networker_rest_collector_uses_default_endpoint_map(tmp_path: Path) -> N
             username="administrator",
             password="secret",
             source_networker="core",
-            hostname_csv_path=str(hostname_csv),
         )
     )
 
@@ -575,6 +572,7 @@ def test_networker_rest_parser_extracts_backup_summary_values() -> None:
             },
         },
         server_name="networker_core",
+        source_networker="core",
     )
 
     assert parsed["summary"]["client_count"] == 2
@@ -626,6 +624,7 @@ def test_networker_rest_parser_normalizes_job_phase_three_fields() -> None:
             }
         },
         server_name="networker_core",
+        source_networker="core",
     )
 
     failed, canceled, running = parsed["jobs"]
@@ -669,6 +668,7 @@ def test_networker_rest_parser_normalizes_backup_phase_four_fields() -> None:
             }
         },
         server_name="networker_core",
+        source_networker="core",
     )
 
     backup = parsed["backups"][0]
@@ -699,6 +699,7 @@ def test_networker_rest_parser_keeps_only_client_inventory_metadata() -> None:
             }
         },
         server_name="networker_core",
+        source_networker="core",
     )
 
     client = parsed["clients"][0]

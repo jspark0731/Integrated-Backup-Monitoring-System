@@ -154,8 +154,8 @@ memory를 우선 조정한다.
 
 1. 모든 ConfigMap의 `TO_BE_FILLED` host/base URL을 실제 값으로 바꾼다.
 2. SNMP OID 및 DXi CLI command가 장비 firmware와 일치하는지 확인한다.
-3. hostname classification CSV에 NetWorker 대상 host와 security domain을
-   입력한다.
+3. 각 NetWorker Collector의 `source_networker`가 해당 서버의 `core`, `chnl`,
+   `info`인지 확인한다. 이 값이 유일한 security domain 기준이며 CSV는 사용하지 않는다.
 4. Elasticsearch를 사용할 경우 `enabled: true`, host, 인증 정보와 CA를
    구성한다.
 5. 각 manifest가 참조하는 Secret을 생성한다.

@@ -28,7 +28,7 @@ DD / DXi / i6000 / NetWorker / ZFS
   scrape한다.
 - Collector가 Grafana로 데이터를 직접 push하지는 않는다. Grafana가 두
   datasource를 각각 조회한다.
-- NetWorker는 hostname CSV로 업무영역을 분류한 뒤 엔티티 단위 `derived`
+- NetWorker는 `source_networker`로 업무영역을 분류한 뒤 엔티티 단위 `derived`
   문서를 영역별 인덱스에 저장한다. 다른 제품군의 derived 변환 모델은 아직
   `ElasticsearchWriter` 저장 경로에 연결되어 있지 않다.
 
@@ -81,11 +81,13 @@ DD / DXi / i6000 / NetWorker / ZFS
 | Current | `NW-OPS-CURRENT-{SOURCE}` | `NW-OPS-CURRENT-CHNL` | 백업 운영자 |
 | Derived | `NW-{DOMAIN}-{ENTITY}-{YYYY-MM}` | `NW-CORE-JOB-2026-07` | 해당 업무영역 운영자 |
 
-`SOURCE`는 호출한 NetWorker 서버의 `core/chnl/info`이고, `DOMAIN`은
-hostname CSV로 판정한 백업 대상 서버의 업무영역이다. 예를 들어 CHNL
-NetWorker가 백업하는 CORE 서버의 job은 `NW-CORE-JOB-*`에 저장되며 문서의
-`source_networker`는 `chnl`이다. 미분류 문서는 `NW-UNMAPPED-{ENTITY}-*`에
-격리한다.
+`SOURCE`와 `DOMAIN`은 모두 Collector 설정의 `source_networker`(`core/chnl/info`)이다.
+예를 들어 CHNL NetWorker의 모든 Job은 Client 이름과 관계없이 `chnl`로 분류된다.
+Client, Job, Backup, Policy, Workflow 모두 `classification_source=source_networker`,
+`classification_status=matched_source_networker`를 기록한다. 유효하지 않은 source는
+설정 오류로 수집을 건너뛰며 parser 직접 호출 시 `ValueError`를 발생시킨다.
+기존 `NW-UNMAPPED-*` 및 이전 도메인 인덱스 문서는 그대로 남는다. 같은 `_id`라도
+새 도메인 인덱스로 재수집되면 인덱스 간 중복이 생길 수 있다.
 
 이 변경은 새 수집 문서의 write 경로에 적용된다. 기존 일자별 인덱스의
 데이터를 새 월간 인덱스로 자동 reindex하거나 삭제하지 않는다.
@@ -197,7 +199,7 @@ collector별 최신 운영 상태를 제공한다. fast 수집만 current를 갱
 | `record_id` | `string` | 엔티티 식별 필드 조합 |
 | `derived_id` | `string` | `{collector}:{document_type}:{record_id}:{YYYY-MM}` |
 | `source_networker` | `string nullable` | 원천 NetWorker 서버; NetWorker 문서에서 사용 |
-| `security_domain` | `string nullable` | CSV로 판정한 업무영역 |
+| `security_domain` | `string nullable` | NetWorker는 검증된 `source_networker`와 동일한 업무영역 |
 | `payload` | `object` | 해당 엔티티 레코드 |
 
 | 대상 | 생성 가능한 `document_type` | `record_id` 우선순위 |

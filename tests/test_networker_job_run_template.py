@@ -114,7 +114,7 @@ class NetworkerJobRunTemplateTests(unittest.TestCase):
                 self.assertEqual(document["job"]["id"], "3234696")
                 self.assertEqual(document["payload"]["parent_job_id"], 3231071)
                 self.assertEqual(document["payload"]["root_parent_job_id"], 3231062)
-                self.assertEqual(encoded["_index"], "nw-unmapped-job-run-2026-10")
+                self.assertEqual(encoded["_index"], "nw-core-job-run-2026-10")
                 self.assertEqual(encoded["_id"], "networker_core:job:3234696")
                 self.assertEqual(document["index_month"], "2026-10")
                 self.assertEqual(document["@timestamp"], "2026-11-01T00:10:00+00:00")

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-from apps.classifiers.hostname import HostnameClassifier
 from apps.clients.networker_rest_client import NetworkerRestClient
 from apps.clients.rest_client import endpoint_errors
 from apps.collectors.base import BaseCollector
@@ -23,13 +21,6 @@ class NetworkerRestCollector(BaseCollector):
     def __init__(self, config) -> None:
         super().__init__(config)
         self.client = NetworkerRestClient(config)
-        self.classifier: HostnameClassifier | None = None
-        if config.skip_reason is None and config.hostname_csv_path:
-            self.classifier = HostnameClassifier.from_csv(
-                Path(config.hostname_csv_path),
-                allowed_domains=config.allowed_security_domains,
-                unmapped_domain=config.unmapped_security_domain,
-            )
 
     async def _collect_payload(self) -> dict[str, Any]:
         return await self._collect_payload_for_class("fast")
@@ -43,8 +34,7 @@ class NetworkerRestCollector(BaseCollector):
         parsed = parse_networker_rest_payload(
             raw,
             server_name=self.name,
-            source_networker=str(self.config.source_networker or self.name),
-            classifier=self.classifier,
+            source_networker=self.config.source_networker,
         )
         errors = endpoint_errors(raw)
         _mark_failed_endpoint_counts_unknown(parsed["summary"], errors)

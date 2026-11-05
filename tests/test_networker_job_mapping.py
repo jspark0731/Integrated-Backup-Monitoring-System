@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from apps.classifiers.hostname import HostnameClassifier
 from apps.core.config import ElasticsearchConfig
 from apps.models import CollectionResult
 from apps.parsers.networker_rest_parser import parse_networker_rest_payload
@@ -36,7 +35,6 @@ def parse(jobs, source="core"):
         {"jobs": {"jobs": jobs}},
         server_name=f"networker_{source}",
         source_networker=source,
-        classifier=HostnameClassifier({"synthetic-client": "core"}),
     )
 
 
@@ -118,7 +116,7 @@ def test_all_four_hierarchy_members_share_root_key_without_join():
         record = action["_source"]
         assert record["payload"]["client_name"] == ""
         assert record["client"]["hostname"] == ""
-        assert record["security_domain"] == "unmapped"
+        assert record["security_domain"] == "core"
         assert record["payload"]["protection_group"] == ""
         assert record["run_on_host"] == "synthetic-client"
 
@@ -187,6 +185,30 @@ def test_repeat_collection_cross_source_and_month_boundary_keep_existing_routing
     assert running["_id"] == first["_id"]
     assert running["_index"] == first["_index"]
     assert running["_source"]["@timestamp"] == "2026-10-31T23:50:00+00:00"
+
+
+@pytest.mark.parametrize("old_domain", ["unmapped", "chnl", "info"])
+def test_reclassification_keeps_id_but_old_index_document_can_coexist(old_domain):
+    payload = parse([api_job()])
+    payload["jobs"][0]["security_domain"] = old_domain
+    result = CollectionResult(
+        collector="networker_core", target_type="Networker", protocol="rest",
+        collected_at=datetime(2026, 11, 1, 0, 15, tzinfo=timezone.utc),
+        ok=True, payload=payload, collection_class="jobs",
+    )
+    writer = ElasticsearchWriter(ElasticsearchConfig(enabled=False))
+    old = next(a for a in writer._actions_for_result(result)
+               if a["_source"].get("document_type") == "job-run")
+    new = runs([api_job()])[0]
+    assert old["_index"] == f"nw-{old_domain}-job-run-2026-10"
+    assert new["_index"] == "nw-core-job-run-2026-10"
+    assert old["_id"] == new["_id"] == "networker_core:job:3234696"
+    # Elasticsearch identity includes the index: indexing the new record cannot
+    # replace the old document in a different domain index.
+    stored = {(old["_index"], old["_id"]): old}
+    stored[(new["_index"], new["_id"])] = new
+    assert len(stored) == 2
+    assert old["_op_type"] == new["_op_type"] == "index"
 
 
 def test_version_five_put_body_matches_template_and_preserves_step_one_contract():

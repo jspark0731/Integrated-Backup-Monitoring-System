@@ -7,6 +7,8 @@ import logging
 
 import yaml
 
+from apps.classifiers.source_networker import validate_source_networker
+
 TO_BE_FILLED = "TO_BE_FILLED"
 LOGGER = logging.getLogger(__name__)
 
@@ -107,9 +109,6 @@ class CollectorConfig:
     jump_ssh_key_path: str | None = None
     command_timeout: int = 30
     source_networker: str | None = None
-    hostname_csv_path: str | None = None
-    allowed_security_domains: tuple[str, ...] = ("core", "chnl", "info")
-    unmapped_security_domain: str = "unmapped"
 
     @property
     def effective_schedule(self) -> ScheduleConfig:
@@ -201,13 +200,12 @@ class CollectorConfig:
             if self.endpoints:
                 required["endpoints"] = self.endpoints
             required["source_networker"] = self.source_networker
-            required["hostname_csv_path"] = self.hostname_csv_path
             required["username"] = self.username
             required["password"] = self.password
-            if self.source_networker and self.source_networker.lower() not in {"core", "chnl", "info"}:
-                return f"unsupported source_networker: {self.source_networker}"
-            if self.hostname_csv_path and not Path(self.hostname_csv_path).is_file():
-                return f"hostname classification CSV does not exist: {self.hostname_csv_path}"
+            try:
+                validate_source_networker(self.source_networker)
+            except ValueError as exc:
+                return str(exc)
             if self.verify_tls and self.ca_certs and not Path(self.ca_certs).is_file():
                 return f"REST CA certificate does not exist: {self.ca_certs}"
         elif self.type == "ZFS":
@@ -345,17 +343,6 @@ def _parse_collector(raw: dict[str, Any]) -> CollectorConfig:
         jump_ssh_key_path=_optional(raw.get("jump_ssh_key_path")),
         command_timeout=int(raw.get("command_timeout", 30)),
         source_networker=_optional(raw.get("source_networker")),
-        hostname_csv_path=_optional((raw.get("classification") or {}).get("hostname_csv_path")),
-        allowed_security_domains=tuple(
-            str(value).strip().lower()
-            for value in (raw.get("classification") or {}).get(
-                "allowed_domains",
-                ("core", "chnl", "info"),
-            )
-        ),
-        unmapped_security_domain=str(
-            (raw.get("classification") or {}).get("unmapped_domain", "unmapped")
-        ).strip().lower(),
     )
 
 

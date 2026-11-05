@@ -92,8 +92,6 @@ collectors:
     username: admin
     password: secret
     source_networker: core
-    classification:
-      hostname_csv_path: /apps/config/hostname_domain.csv
 """,
         encoding="utf-8",
     )
@@ -104,7 +102,6 @@ collectors:
     assert config.collectors[0].effective_schedule.interval_minutes == 1
     assert config.collectors[0].effective_schedule.second == 30
     assert config.collectors[0].source_networker == "core"
-    assert config.collectors[0].hostname_csv_path == "/apps/config/hostname_domain.csv"
 
 
 def test_fast_and_slow_schedules_load_with_defaults(tmp_path: Path) -> None:
@@ -234,8 +231,6 @@ collectors:
 
 
 def test_networker_server_protection_settings_load_and_validate(tmp_path: Path) -> None:
-    classification = tmp_path / "hostname_domain.csv"
-    classification.write_text("hostname,security_domain\n", encoding="utf-8")
     config_path = tmp_path / "collector.yaml"
     config_path.write_text(
         f"""
@@ -248,8 +243,6 @@ collectors:
     username: rest-user
     password: secret
     source_networker: core
-    classification:
-      hostname_csv_path: {classification}
     rest:
       max_concurrency: 1
       request_spacing_seconds: 30
@@ -282,8 +275,6 @@ collectors:
 
 
 def test_networker_three_collection_schedules_load(tmp_path: Path) -> None:
-    classification = tmp_path / "hostname_domain.csv"
-    classification.write_text("hostname,security_domain\n", encoding="utf-8")
     config_path = tmp_path / "collector.yaml"
     config_path.write_text(
         f"""
@@ -300,8 +291,6 @@ collectors:
     username: rest-user
     password: secret
     source_networker: core
-    classification:
-      hostname_csv_path: {classification}
 """,
         encoding="utf-8",
     )
@@ -320,18 +309,15 @@ collectors:
 
 
 def test_networker_requires_basic_auth_and_rejects_ifrs(tmp_path: Path) -> None:
-    classification = tmp_path / "hostname_domain.csv"
-    classification.write_text("hostname,security_domain\n", encoding="utf-8")
 
     missing_basic_auth = load_config(
-        _write_networker_config(tmp_path, classification, source="core", credentials="")
+        _write_networker_config(tmp_path, source="core", credentials="")
     ).collectors[0]
     assert missing_basic_auth.skip_reason == "REST config contains TO_BE_FILLED values"
 
     ifrs = load_config(
         _write_networker_config(
             tmp_path,
-            classification,
             source="ifrs",
             credentials="    username: rest-user\n    password: secret\n",
         )
@@ -341,7 +327,6 @@ def test_networker_requires_basic_auth_and_rejects_ifrs(tmp_path: Path) -> None:
 
 def _write_networker_config(
     tmp_path: Path,
-    classification: Path,
     *,
     source: str,
     credentials: str,
@@ -356,8 +341,6 @@ collectors:
     enabled: true
     base_url: https://networker.example.com:9090
 {credentials}    source_networker: {source}
-    classification:
-      hostname_csv_path: {classification}
 """,
         encoding="utf-8",
     )

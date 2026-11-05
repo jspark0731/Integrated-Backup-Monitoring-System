@@ -39,15 +39,6 @@ data:
           backups_query_window_minutes: 20
           field_filter: true
         source_networker: chnl
-        classification:
-          hostname_csv_path: /apps/config/hostname_domain.csv
-          allowed_domains: [core, chnl, info]
-          unmapped_domain: unmapped
-  hostname_domain.csv: |
-    hostname,security_domain
-    networker_core_client_hostname_TO_BE_FILLED,core
-    networker_chnl_client_hostname_TO_BE_FILLED,chnl
-    networker_info_client_hostname_TO_BE_FILLED,info
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -89,7 +80,6 @@ spec:
             - {name: APP_CONFIG, value: /apps/config/collector.yaml}
           volumeMounts:
             - {name: config, mountPath: /apps/config/collector.yaml, subPath: collector.yaml, readOnly: true}
-            - {name: config, mountPath: /apps/config/hostname_domain.csv, subPath: hostname_domain.csv, readOnly: true}
             - {name: secrets, mountPath: /apps/secrets, readOnly: true}
           readinessProbe:
             httpGet: {path: /readyz, port: http}

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import shlex
 from typing import Any
 
-from apps.classifiers.hostname import HostnameClassifier
+from apps.classifiers.source_networker import validate_source_networker
 
 
 def parse_networker_rest_payload(
@@ -13,18 +13,18 @@ def parse_networker_rest_payload(
     server_name: str,
     *,
     source_networker: str | None = None,
-    classifier: HostnameClassifier | None = None,
 ) -> dict[str, Any]:
-    source = (source_networker or server_name).strip().lower()
+    source = validate_source_networker(source_networker)
     jobs = [_normalize_job(item, server_name, source) for item in _items(payloads.get("jobs"), "jobs")]
     clients = [_normalize_client(item, server_name, source) for item in _items(payloads.get("clients"), "clients")]
     policies, workflows = _normalize_policies(payloads.get("policies"), server_name)
     backups = [_normalize_backup(item, server_name, source) for item in _items(payloads.get("backups"), "backups")]
 
-    jobs = [_classify_record(item, classifier) for item in jobs]
-    clients = [_classify_record(item, classifier) for item in clients]
-    backups = [_classify_record(item, classifier) for item in backups]
-    policies, workflows = _classify_inventory(policies, workflows, jobs, backups, source)
+    jobs = [_classify_record(item, source) for item in jobs]
+    clients = [_classify_record(item, source) for item in clients]
+    backups = [_classify_record(item, source) for item in backups]
+    policies = [_classify_record(item, source) for item in policies]
+    workflows = [_classify_record(item, source) for item in workflows]
 
     summary = _build_summary(server_name, jobs, clients, policies, workflows, backups)
     summary["source_networker"] = source
@@ -40,7 +40,10 @@ def parse_networker_rest_payload(
         "clients": clients,
         "policies": policies,
         "workflows": workflows,
-        "monthly_report": _build_monthly_report(server_name, jobs, clients, workflows, backups),
+        "monthly_report": [
+            _classify_record(item, source)
+            for item in _build_monthly_report(server_name, jobs, clients, workflows, backups)
+        ],
     }
 
 
@@ -341,72 +344,17 @@ def _build_monthly_report(
     return list(rows.values())
 
 
-def _classify_record(record: dict[str, Any], classifier: HostnameClassifier | None) -> dict[str, Any]:
-    hostname = record.get("client_name")
-    if classifier is None:
-        return record | {
-            "client_hostname": _string(hostname).lower().rstrip("."),
-            "security_domain": "unmapped",
-            "classification_status": "classifier_unavailable",
-            "classification_source": "hostname_csv",
-        }
-
-    classification = classifier.classify(hostname)
-    return record | {
-        "client_hostname": classification.hostname,
-        "security_domain": classification.security_domain,
-        "classification_status": classification.status,
-        "classification_source": "hostname_csv",
+def _classify_record(record: dict[str, Any], source_networker: str) -> dict[str, Any]:
+    classification = {
+        "source_networker": source_networker,
+        "security_domain": source_networker,
+        "classification_status": "matched_source_networker",
+        "classification_source": "source_networker",
     }
-
-
-def _classify_inventory(
-    policies: list[dict[str, Any]],
-    workflows: list[dict[str, Any]],
-    jobs: list[dict[str, Any]],
-    backups: list[dict[str, Any]],
-    source_networker: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    policy_domains: dict[str, set[str]] = defaultdict(set)
-    workflow_domains: dict[tuple[str, str], set[str]] = defaultdict(set)
-    for record in jobs + backups:
-        domain = record["security_domain"]
-        policy = record.get("policy_name") or ""
-        workflow = record.get("workflow_name") or ""
-        if policy:
-            policy_domains[policy].add(domain)
-        if policy or workflow:
-            workflow_domains[(policy, workflow)].add(domain)
-
-    classified_policies = []
-    for policy in policies:
-        domains = policy_domains.get(policy["policy_name"]) or {"unmapped"}
-        for domain in sorted(domains):
-            classified_policies.append(
-                policy
-                | {
-                    "source_networker": source_networker,
-                    "security_domain": domain,
-                    "classification_status": "derived_from_workload",
-                    "classification_source": "hostname_csv",
-                }
-            )
-
-    classified_workflows = []
-    for workflow in workflows:
-        key = (workflow["policy_name"], workflow["workflow_name"])
-        domains = workflow_domains.get(key) or policy_domains.get(workflow["policy_name"]) or {"unmapped"}
-        for domain in sorted(domains):
-            classified_workflows.append(
-                workflow
-                | {
-                    "source_networker": source_networker,
-                    "security_domain": domain,
-                    "classification_status": "derived_from_workload",
-                    "classification_source": "hostname_csv",
-                }
-            )
-    return classified_policies, classified_workflows
+    if "client_name" in record:
+        # Keep the existing API name extraction and hostname normalization.
+        classification["client_hostname"] = _string(record["client_name"]).lower().rstrip(".")
+    return record | classification
 
 
 def _nested_counts(counts: Counter[tuple[str, str]]) -> dict[str, dict[str, int]]:

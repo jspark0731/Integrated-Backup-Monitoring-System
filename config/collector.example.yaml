@@ -303,10 +303,6 @@ collectors:
       backups_query_window_minutes: 20
       field_filter: true
     source_networker: core
-    classification:
-      hostname_csv_path: /apps/config/hostname_domain.csv
-      allowed_domains: [core, chnl, info]
-      unmapped_domain: unmapped
 
   - name: networker_chnl
     type: Networker
@@ -333,10 +329,6 @@ collectors:
     ca_certs: networker_chnl_ca_certs_TO_BE_FILLED
     rest: *networker_rest
     source_networker: chnl
-    classification:
-      hostname_csv_path: /apps/config/hostname_domain.csv
-      allowed_domains: [core, chnl, info]
-      unmapped_domain: unmapped
 
   - name: networker_info
     type: Networker
@@ -363,10 +355,6 @@ collectors:
     ca_certs: networker_info_ca_certs_TO_BE_FILLED
     rest: *networker_rest
     source_networker: info
-    classification:
-      hostname_csv_path: /apps/config/hostname_domain.csv
-      allowed_domains: [core, chnl, info]
-      unmapped_domain: unmapped
 
   - name: ZFS_1
     type: ZFS

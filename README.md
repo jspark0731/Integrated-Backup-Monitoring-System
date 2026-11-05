@@ -181,12 +181,16 @@ NetWorker manifest는 서버별로 분리되어 있습니다.
 공유하지만 각 manifest의 `secret.items`가 자기 서버의 CA·username·password만
 mount합니다.
 
-각 NetWorker ConfigMap의 `hostname_domain.csv`는 DNS 설정이 아니라 REST
-응답의 backup client hostname을 `core`, `chnl`, `info`로 분류하는
-매핑입니다. 해당 NetWorker 마스터가 반환할 수 있는 모든 client hostname을
-포함해야 합니다. 여러 마스터가 같은 client들을 반환할 수 있다면 세
-ConfigMap의 CSV를 동일한 전체 목록으로 유지합니다. 마스터 서버 접속용 이름
-해석은 각 Deployment의 `hostAliases`가 담당합니다.
+NetWorker의 `security_domain`은 Collector 설정의 `source_networker`만 사용합니다.
+`core`, `chnl`, `info`만 허용하며 누락되거나 유효하지 않으면 설정 오류로 수집을
+건너뜁니다. Client, Job, Backup, Policy, Workflow에 동일하게 적용되므로 신규
+Client 등록 시 CSV 수정이 필요하지 않습니다. 분류 메타데이터는
+`classification_source=source_networker`, `classification_status=matched_source_networker`입니다.
+Client 이름과 hostname의 기존 API 추출·정규화는 유지합니다. 마스터 서버 접속용
+이름 해석은 각 Deployment의 `hostAliases`가 담당합니다.
+
+분류 변경으로 대상 인덱스가 달라지면 같은 Job의 `_id`가 이전 인덱스와 새 인덱스에
+공존할 수 있습니다. 기존 문서의 자동 삭제나 재색인은 수행하지 않습니다.
 
 ```bash
 kubectl apply -k k8s

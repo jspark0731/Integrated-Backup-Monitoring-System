@@ -82,6 +82,12 @@ def test_networker_has_one_workload_per_server() -> None:
         collector = embedded_config["collectors"][0]
         assert collector["name"] == f"networker_{source}"
         assert collector["source_networker"] == source
+        assert "classification" not in collector
+        assert set(config_map["data"]) == {"collector.yaml"}
+        assert all(
+            "hostname_domain.csv" not in mount["mountPath"]
+            for mount in pod_spec["containers"][0]["volumeMounts"]
+        )
         assert "token_file" not in collector
         assert collector["username_file"] == (
             f"/apps/secrets/networker/{source}/username"
