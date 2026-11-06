@@ -40,3 +40,5 @@ tools/
 
 # etc
 .csv
+.test-tmp/
+docs/
