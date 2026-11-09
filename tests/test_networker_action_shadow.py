@@ -16,7 +16,8 @@ from apps.lookups.networker_action_shadow.publisher import HTTPTransport, Shadow
 from apps.lookups.networker_action_shadow.schema import SHADOW_INDEX, lookup_schema
 
 START = datetime(2026, 11, 9, 3, tzinfo=timezone.utc)
-END = START + timedelta(hours=2)
+END = START + timedelta(hours=2, minutes=30)
+RAW_END = START + timedelta(hours=2)
 OBS = START + timedelta(minutes=30)
 JOB = "tmp-nw-job-run-4c2-20261109"
 RAW = "nw-ops-raw-core-2026-11"
@@ -151,7 +152,7 @@ class FakeHTTP:
 
 async def run(http, **kwargs):
     return await execute(http, source="core", job_indices=[JOB], raw_indices=[RAW],
-        job_start=START, job_end=END, raw_start=START, raw_end=END, **kwargs)
+        job_start=START, job_end=END, raw_start=START, raw_end=RAW_END, **kwargs)
 
 
 def plan(raws, jobs, generation):
@@ -272,14 +273,23 @@ def test_source_mismatch_rejected_without_hostname_inference():
         analyse([raw(source="chnl")], hierarchy(), "core")
 
 
-def test_425_baseline_is_job_count_not_lookup_count():
+@pytest.mark.asyncio
+async def test_425_baseline_is_job_count_not_lookup_count():
     jobs = [job(str(8000 + i), "workflow job", "0", "0") for i in range(9)]
     jobs += [job(str(8100 + i), root=str(8000 + i), parent=str(8000 + i)) for i in range(5)]
     jobs += [job(str(10000 + i), "save job", str(8100 + i % 5), str(8000 + i % 5)) for i in range(61)]
     jobs += [job(str(11000 + i), "save job", "9900" if i < 323 else "9901", "9990") for i in range(338)]
     jobs += [job(str(20000 + i), "savefs job") for i in range(5)]
     jobs += [job(str(21000 + i), "recover pipe to save job") for i in range(7)]
-    report = analyse([], jobs, "core", synced_at=END)["report"]
+    # Some baseline rows must lie in the corrected final 30 minutes, so reverting
+    # to 05:00 cannot accidentally keep this test passing.
+    jobs[-2]["_source"]["observed_at"] = "2026-11-09T05:00:00+00:00"
+    jobs[-1]["_source"]["observed_at"] = "2026-11-09T05:29:59+00:00"
+    outside = [job("99001", "save job"), job("99002", "save job")]
+    outside[0]["_source"]["observed_at"] = (START - timedelta(seconds=1)).isoformat()
+    outside[1]["_source"]["observed_at"] = END.isoformat()
+    http = FakeHTTP(jobs=jobs + outside, raws=[])
+    report = await run(http)
     assert report["job_run_documents"] == 425
     assert report["baseline_comparison"]["total_matches"]
     assert all(v["matches"] for v in report["baseline_comparison"]["types"].values())
@@ -288,6 +298,9 @@ def test_425_baseline_is_job_count_not_lookup_count():
     assert report["hierarchy"]["save_parent_missing"] == 338
     assert report["action_lookup_documents"] == 7
     assert report["baseline_comparison"]["client_subgroups_evaluated"] is False
+    assert report["reads"]["jobs"]["expected_total"] == 425
+    assert report["read_coverage"]["job_observed_to"] == "2026-11-09T05:30:00+00:00"
+    assert report["read_coverage"]["raw_collected_to"] == "2026-11-09T05:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -477,6 +490,9 @@ def test_shadow_artifacts_mapping_and_request_boundaries():
             if endpoint == "_query":
                 assert "FROM " in parsed["query"]
                 assert not re.search(r"FROM nw-", parsed["query"])
+                if "observed_at" in parsed["query"]:
+                    assert 'observed_at >= TO_DATETIME("2026-11-09T03:00:00Z")' in parsed["query"]
+                    assert 'observed_at < TO_DATETIME("2026-11-09T05:30:00Z")' in parsed["query"]
                 esql_count += 1
     assert esql_count == 8
 
@@ -640,3 +656,32 @@ async def test_dry_mode_rejects_state_and_invalid_url_before_connection(tmp_path
     args.state = tmp_path / "state.sqlite"
     with pytest.raises(ValueError, match="dry_run"):
         await cli.run(args)
+
+
+def test_cli_corrected_job_window_and_independent_raw_bounds():
+    from tools import networker_action_shadow as cli
+    from apps.lookups.networker_action_shadow.reader import DEFAULT_JOB_START, DEFAULT_JOB_END
+    args = cli.parser().parse_args(["--raw-start", START.isoformat(), "--raw-end", RAW_END.isoformat(), "--output", "unused"])
+    assert args.source == "core"
+    assert args.job_start == DEFAULT_JOB_START == "2026-11-09T03:00:00Z"
+    assert args.job_end == DEFAULT_JOB_END == "2026-11-09T05:30:00Z"
+    assert args.raw_end == "2026-11-09T05:00:00+00:00"
+    query = range_query(args.source, "jobs", args.job_start, args.job_end)
+    assert query["bool"]["filter"][0] == {"range": {"observed_at": {
+        "gte": "2026-11-09T03:00:00+00:00", "lt": "2026-11-09T05:30:00+00:00"}}}
+    with pytest.raises(ValueError, match="explicit_input"):
+        validate_indices(["tmp-nw-parent-lookup-20261109"], "jobs")
+
+
+@pytest.mark.asyncio
+async def test_explicit_original_index_without_fixed_index():
+    original = "nw-core-job-run-2026-11"
+    http = FakeHTTP()
+    http.inputs[original] = http.inputs.pop(JOB)
+    for hit in http.inputs[original]:
+        hit["_index"] = original
+    result = await execute(http, source="core", job_indices=[original], raw_indices=[RAW],
+        job_start=START, job_end=END, raw_start=START, raw_end=RAW_END)
+    assert result["mode"] == "dry-run" and result["job_run_documents"] == 3
+    assert not any(JOB in path for _, path, _ in http.calls)
+    assert not any(method == "PUT" for method, _, _ in http.calls)

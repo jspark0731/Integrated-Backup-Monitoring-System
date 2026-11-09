@@ -7,6 +7,9 @@ import re
 from apps.lookups.networker_action.adapters import IncompleteRead
 from apps.lookups.networker_action.models import timestamp
 
+DEFAULT_JOB_START = "2026-11-09T03:00:00Z"
+DEFAULT_JOB_END = "2026-11-09T05:30:00Z"
+
 
 def validate_indices(indices, channel):
     patterns = {
