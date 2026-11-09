@@ -282,7 +282,7 @@ def _time_range_query(field: str, start: datetime, end: datetime) -> str:
 
 
 def _format_query_time(value: datetime) -> str:
-    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
 def _response_item_count(payload: Any) -> int:

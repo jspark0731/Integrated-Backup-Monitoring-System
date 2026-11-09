@@ -38,7 +38,11 @@ secrets/
 # tools
 tools/
 
+# docs
+docs/
+
 # etc
 .csv
 .test-tmp/
-docs/
+input/
+output/
