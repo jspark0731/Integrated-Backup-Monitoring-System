@@ -1,12 +1,13 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
 
 from apps.clients.i6000_rest_client import I6000RestClient
-from apps.clients.networker_rest_client import NetworkerRestClient
+from apps.clients.networker_rest_client import NetworkerRestClient, _format_query_time
 from apps.clients.rest_client import ERRORS_KEY, ReusableRestClient
 from apps.core.config import CollectorConfig
 
@@ -27,6 +28,84 @@ def i6000_config(max_concurrency: int = 4) -> CollectorConfig:
         },
         rest_max_concurrency=max_concurrency,
     )
+
+
+@pytest.mark.parametrize(
+    ("kst", "expected"),
+    [
+        ("2026-11-09T09:30:00+09:00", "2026-11-09T00:30:00+00:00"),
+        ("2026-11-01T00:05:00+09:00", "2026-10-31T15:05:00+00:00"),
+        ("2027-01-01T00:00:00.999999+09:00", "2026-12-31T15:00:00+00:00"),
+    ],
+)
+def test_networker_query_time_keeps_explicit_utc_offset(kst, expected) -> None:
+    local_time = datetime.fromisoformat(kst)
+    utc_time = local_time.astimezone(timezone.utc)
+
+    assert _format_query_time(local_time) == expected
+    assert _format_query_time(utc_time) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("collection_class", "field", "minutes"),
+    [("jobs", "endTime", 10), ("backups", "saveTime", 20)],
+)
+async def test_networker_query_offset_survives_httpx_encoding(
+    collection_class, field, minutes,
+) -> None:
+    requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={collection_class: []})
+
+    client = NetworkerRestClient(
+        CollectorConfig(
+            name="networker_core",
+            type="Networker",
+            protocol="rest",
+            enabled=True,
+            base_url="https://networker.example.com:9090",
+            username="rest-user",
+            password="secret",
+            source_networker="core",
+            networker_jobs_query_window_minutes=10,
+            networker_backups_query_window_minutes=20,
+        )
+    )
+    client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    # A KST month boundary belongs to the previous day/month in UTC.
+    kst = datetime(2026, 11, 1, 0, 5, tzinfo=timezone(timedelta(hours=9)))
+    try:
+        local_payload = await client.fetch_payloads(collection_class, now=kst)
+        utc_payload = await client.fetch_payloads(
+            collection_class, now=kst.astimezone(timezone.utc),
+        )
+    finally:
+        await client.close()
+
+    start = "2026-10-31T14:55:00+00:00" if minutes == 10 else "2026-10-31T14:45:00+00:00"
+    end = "2026-10-31T15:05:00+00:00"
+    expected = f'{field}:["{start}" TO "{end}"]'
+    assert len(requests) == 2
+    for request in requests:
+        assert request.url.path == f"/nwrestapi/v3/global/{collection_class}"
+        assert dict(request.url.params) == {"q": expected}
+        encoded = request.url.query.decode("ascii")
+        # Decode independently: a literal '+' would become a space here.
+        assert parse_qs(encoded) == {"q": [expected]}
+        assert encoded.count("%2B00%3A00") == 2
+        assert "%252B" not in encoded
+    assert requests[0].url == requests[1].url
+    assert local_payload == utc_payload
+    window = local_payload["_query_window"]
+    assert window["start"] == start
+    assert window["end"] == end
+    assert window["minutes"] == minutes
+    assert window["endpoints"][collection_class] == {
+        "start": start, "end": end, "minutes": minutes,
+    }
 
 
 @pytest.mark.asyncio
@@ -153,10 +232,10 @@ async def test_networker_uses_basic_auth_without_bearer_token() -> None:
         "/nwrestapi/v3/global/backups",
     ]
     assert requests[0][1]["q"] == (
-        'endTime:["2026-08-28T12:20:00" TO "2026-08-28T12:30:00"]'
+        'endTime:["2026-08-28T12:20:00+00:00" TO "2026-08-28T12:30:00+00:00"]'
     )
     assert requests[1][1]["q"] == (
-        'saveTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
+        'saveTime:["2026-08-28T12:10:00+00:00" TO "2026-08-28T12:30:00+00:00"]'
     )
     assert all("fl" not in params for _, params in requests)
     assert authorization_headers
@@ -234,10 +313,10 @@ async def test_networker_uses_class_specific_endpoints_and_windows() -> None:
         "/nwrestapi/v3/global/backups",
     ]
     assert requests[0][1]["q"] == (
-        'endTime:["2026-08-28T12:20:00" TO "2026-08-28T12:30:00"]'
+        'endTime:["2026-08-28T12:20:00+00:00" TO "2026-08-28T12:30:00+00:00"]'
     )
     assert requests[1][1]["q"] == (
-        'saveTime:["2026-08-28T12:10:00" TO "2026-08-28T12:30:00"]'
+        'saveTime:["2026-08-28T12:10:00+00:00" TO "2026-08-28T12:30:00+00:00"]'
     )
     assert jobs["_query_window"]["minutes"] == 10
     assert backups["_query_window"]["minutes"] == 20
@@ -425,7 +504,7 @@ async def test_networker_debug_log_contains_q_without_fl(caplog) -> None:
         for record in caplog.records
         if record.name == "apps.clients.networker_rest_client"
     )
-    assert 'endTime:["2026-08-28T12:20:00" TO "2026-08-28T12:30:00"]' in message
+    assert 'endTime:["2026-08-28T12:20:00+00:00" TO "2026-08-28T12:30:00+00:00"]' in message
     assert "fl=None" in message
 
 
