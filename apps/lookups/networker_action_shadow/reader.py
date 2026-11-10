@@ -32,9 +32,10 @@ def range_query(source, channel, start, end):
     nested = "payload.source_networker" if channel == "jobs" else "payload.summary.source_networker"
     filters = [
         {"range": {time_field: {"gte": timestamp(start).isoformat(), "lt": timestamp(end).isoformat()}}},
-        {"bool": {"should": [{"term": {"source_networker": source}}, {"term": {nested: source}}], "minimum_should_match": 1}},
-        {"term": {"document_type": "job-run"}} if channel == "jobs" else {"term": {"collection_class": "backups"}},
     ]
+    if channel == "jobs":
+        filters.append({"bool": {"should": [{"term": {"source_networker": source}}, {"term": {nested: source}}], "minimum_should_match": 1}})
+    filters.append({"term": {"document_type": "job-run"}} if channel == "jobs" else {"term": {"collection_class": "backups"}})
     return {"bool": {"filter": filters}}
 
 
@@ -62,7 +63,9 @@ class PITReader:
         nested = "payload.source_networker" if channel == "jobs" else "payload.summary.source_networker"
         time_field = "observed_at" if channel == "jobs" else "@timestamp"
         kind = "document_type" if channel == "jobs" else "collection_class"
-        fields = [time_field, kind, "source_networker", nested]
+        fields = [time_field, kind]
+        if channel == "jobs":
+            fields.extend(["source_networker", nested])
         response = await self.http.request("GET", f"/{','.join(indices)}/_field_caps",
                                            params={"fields": ",".join(fields), "include_unmapped": "true"})
         caps = response.get("fields", {})
@@ -72,9 +75,9 @@ class PITReader:
             return bool(entries) and all(t in allowed and v.get("searchable") is True
                                          and not v.get("non_searchable_indices") for t, v in entries.items())
 
-        if not usable(time_field, {"date", "date_nanos"}) or not usable(kind, {"keyword"}) or not any(
+        if not usable(time_field, {"date", "date_nanos"}) or not usable(kind, {"keyword"}) or (channel == "jobs" and not any(
             usable(f, {"keyword"}) for f in ["source_networker", nested]
-        ):
+        )):
             raise IncompleteRead("input_mapping_not_searchable")
 
     async def read(self, indices, channel, query):

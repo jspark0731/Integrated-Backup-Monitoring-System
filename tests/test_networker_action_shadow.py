@@ -270,7 +270,7 @@ def test_missing_workflow_and_unsupported_types_preserve_counts():
 
 def test_source_mismatch_rejected_without_hostname_inference():
     with pytest.raises(ValueError, match="input_source"):
-        analyse([raw(source="chnl")], hierarchy(), "core")
+        analyse([raw()], [job(source="chnl")], "core")
 
 
 @pytest.mark.asyncio

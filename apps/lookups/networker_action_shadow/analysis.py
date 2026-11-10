@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from apps.lookups.networker_action.aggregate import ActionLookupBuilder
 from .reader import PITReader, range_query, validate_indices
+from .raw_source import select_raw_sources
 from apps.lookups.networker_action.extract import extract_raw
 from apps.lookups.networker_action.models import source_of, timestamp
 from apps.lookups.networker_action.validate import ACTION_TYPE, read_job, select_job, validate_save
@@ -20,9 +21,7 @@ def analyse(raw, jobs, source, *, synced_at=None, generation="dry-run"):
     for hit in jobs:
         if source_of(hit["_source"]) != source:
             raise ValueError("input_source_mismatch")
-    for hit in raw:
-        if source_of(hit["_source"], raw=True) != source:
-            raise ValueError("input_source_mismatch")
+    raw, raw_source_audit = select_raw_sources(raw, source)
     builder.add_jobs(jobs)
     builder.add_raw(raw)
     documents = builder.build(synced_at=synced_at or datetime.now(timezone.utc), generation=generation,
@@ -83,13 +82,17 @@ def analyse(raw, jobs, source, *, synced_at=None, generation="dry-run"):
         payload = doc.get("payload", {})
         collection_failures += bool(doc.get("ok") is False or payload.get("collection_status") in {"partial", "error"} or payload.get("endpoint_errors"))
         summary = payload.get("summary", {})
-        container = payload.get("raw", {})
+        container = payload.get("raw")
+        container = container if isinstance(container, dict) else {}
         backups = container.get("backups")
         backups = backups.get("backups") if isinstance(backups, dict) else backups
         if isinstance(backups, list):
             backup_items += len(backups)
         window = summary.get("query_window") or container.get("_query_window") or {}
-        endpoint = window.get("endpoints", {}).get("backups", window)
+        window = window if isinstance(window, dict) else {}
+        endpoints = window.get("endpoints")
+        endpoint = endpoints.get("backups", window) if isinstance(endpoints, dict) else window
+        endpoint = endpoint if isinstance(endpoint, dict) else {}
         start, end = timestamp(endpoint.get("start")), timestamp(endpoint.get("end"))
         if start and end and start < end:
             windows.append((start, end))
@@ -99,7 +102,8 @@ def analyse(raw, jobs, source, *, synced_at=None, generation="dry-run"):
             gaps += 1
         previous = max(previous, end) if previous else end
     report = {
-        "source_networker": source, "job_run_documents": len(jobs), "raw_documents": len(raw),
+        "source_networker": source, "job_run_documents": len(jobs), "raw_documents": raw_source_audit["raw_hits_total"],
+        **raw_source_audit,
         "job_types": {k: kinds[k] for k in JOB_KINDS},
         "original_job_statuses": {k: statuses[k] for k in ["success", "failed", "running", "canceled", "unknown"]},
         "baseline_comparison": {"expected_total": 425, "actual_total": len(jobs), "total_matches": len(jobs) == 425,
@@ -140,6 +144,8 @@ def analyse(raw, jobs, source, *, synced_at=None, generation="dry-run"):
         report["incomplete_reasons"].append("relationship_references_missing")
     if builder.issues:
         report["incomplete_reasons"].append("input_quarantined_issues")
+    if raw_source_audit["raw_source_rejected"]:
+        report["incomplete_reasons"].append("raw_source_validation_failed")
     return {"generation": generation, "documents": documents, "report": report}
 
 
@@ -174,6 +180,8 @@ async def execute(http, *, source, job_indices, raw_indices, job_start, job_end,
         "raw_collected_from": timestamp(raw_start).isoformat(), "raw_collected_to": timestamp(raw_end).isoformat(),
         "cross_channel_atomic_snapshot": False}
     if state:
+        if plan["report"]["raw_source_rejected"]:
+            raise ValueError("raw_source_validation_failed")
         current_report = plan["report"]
 
         def build_plan(raw, jobs, generation):
