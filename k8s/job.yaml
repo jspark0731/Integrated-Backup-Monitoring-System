@@ -10,7 +10,7 @@ data:
   NW_LOOKUP_ES_URL: https://elasticsearch:9200
   # Independent RAW evidence bounds. Examples only; review coverage before use.
   RAW_START: "2026-11-09T03:00:00Z"
-  RAW_END: "2026-11-09T05:00:00Z"
+  RAW_END: "2026-11-09T05:30:00Z"
 ---
 apiVersion: batch/v1
 kind: Job
