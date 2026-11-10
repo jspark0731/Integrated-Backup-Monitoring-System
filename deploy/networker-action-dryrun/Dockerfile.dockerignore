@@ -1,0 +1,23 @@
+# Dockerfile-specific build context; root Collector .dockerignore is unchanged.
+**
+!apps/
+!apps/__init__.py
+!apps/classifiers/
+!apps/classifiers/__init__.py
+!apps/classifiers/source_networker.py
+!apps/lookups/
+!apps/lookups/__init__.py
+!apps/lookups/networker_action/
+!apps/lookups/networker_action/**
+!apps/lookups/networker_action_shadow/
+!apps/lookups/networker_action_shadow/**
+!tools/
+!tools/networker_action_shadow.py
+!tools/networker_action_dryrun_container.py
+!deploy/
+!deploy/networker-action-dryrun/
+!deploy/networker-action-dryrun/requirements.txt
+!wheelhouse/
+!wheelhouse/*.whl
+**/__pycache__
+**/*.pyc

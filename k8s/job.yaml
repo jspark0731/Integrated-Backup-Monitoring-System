@@ -1,0 +1,117 @@
+# Standalone resources outside the Collector's kustomization; no Collector Pod selection.
+# Namespace intentionally omitted: use the existing Collector/Secret namespace.
+# Image is a NEW example build tag, not a claimed existing image. Load/tag first.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: networker-action-dryrun-config
+data:
+  # Existing k8s/networker-core.yaml address; verify live Service/namespace/TLS SAN.
+  NW_LOOKUP_ES_URL: https://elasticsearch:9200
+  # Independent RAW evidence bounds. Examples only; review coverage before use.
+  RAW_START: "2026-11-09T03:00:00Z"
+  RAW_END: "2026-11-09T05:00:00Z"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: networker-action-dryrun-20261109
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 0
+  # No TTL: preserve completed Pod logs until explicitly archived/deleted.
+  template:
+    metadata:
+      labels:
+        app: networker-action-dryrun
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # If this single control-plane node is tainted, review adding its specific
+      # NoSchedule toleration. Do not remove existing cluster taints automatically.
+      containers:
+        - name: dry-run
+          image: docker.io/library/backup-dashboard-collector-networker:step4c2-dryrun-v1
+          imagePullPolicy: Never
+          args:
+            - --mode
+            - dry-run
+            - --source
+            - core
+            - --jobs
+            - nw-core-job-run-2026-11
+            - --raw
+            - nw-ops-raw-core-2026-11
+            - --job-start
+            - "2026-11-09T03:00:00Z"
+            - --job-end
+            - "2026-11-09T05:30:00Z"
+            - --raw-start
+            - $(RAW_START)
+            - --raw-end
+            - $(RAW_END)
+            - --page-size
+            - "100"
+            - --max-hits
+            - "100000"
+            - --output
+            - /results/run
+          env:
+            - name: NW_LOOKUP_ES_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: networker-action-dryrun-config
+                  key: NW_LOOKUP_ES_URL
+            - name: RAW_START
+              valueFrom:
+                configMapKeyRef:
+                  name: networker-action-dryrun-config
+                  key: RAW_START
+            - name: RAW_END
+              valueFrom:
+                configMapKeyRef:
+                  name: networker-action-dryrun-config
+                  key: RAW_END
+            - name: NW_LOOKUP_ES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: backup-dashboard-collector-networker-secrets
+                  key: elasticsearch-username
+            - name: NW_LOOKUP_ES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backup-dashboard-collector-networker-secrets
+                  key: elasticsearch-password
+            - name: NW_LOOKUP_ES_CA_CERTS
+              value: /apps/secrets/elasticsearch/ca.crt
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 512Mi}
+          volumeMounts:
+            - {name: ca, mountPath: /apps/secrets/elasticsearch, readOnly: true}
+            - {name: results, mountPath: /results}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: ca
+          secret:
+            secretName: backup-dashboard-collector-networker-secrets
+            defaultMode: 0444
+            items:
+              - {key: elasticsearch-ca-crt, path: ca.crt}
+        - name: results
+          emptyDir: {sizeLimit: 128Mi}
+        - name: tmp
+          emptyDir: {sizeLimit: 128Mi}

@@ -35,9 +35,6 @@ build/
 *.crt
 secrets/
 
-# tools
-tools/
-
 # docs
 docs/
 
