@@ -1,7 +1,7 @@
 {
   "index_patterns": ["nw-*-job-run-*"],
   "priority": 400,
-  "version": 5,
+  "version": 6,
   "composed_of": ["nw-common-mappings"],
   "_meta": {
     "description": "NetWorker job-run analytics documents"
@@ -91,7 +91,10 @@
             "stopped": {"type": "boolean"},
             "root_parent_job_id": {"type": "keyword"},
             "parent_job_id": {"type": "keyword"},
-            "previous_job_id": {"type": "keyword"}
+            "previous_job_id": {"type": "keyword"},
+            "adhoc_job": {"type": "boolean"},
+            "message": {"type": "text", "index": false},
+            "execution_evidence": {"type": "object", "enabled": false}
           }
         }
       }

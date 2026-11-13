@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+import re
 import shlex
 from typing import Any
 
@@ -78,6 +79,9 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
         "status_raw": status_raw,
         "status": status,
         "status_normalized": status,
+        "adhoc_job": item.get("adhocJob") if type(item.get("adhocJob")) is bool else None,
+        "message": item.get("message") if isinstance(item.get("message"), str) else "",
+        "execution_evidence": _action_evidence(item.get("message")),
         "exit_code": exit_code,
         "policy_name": _string(item.get("policyName")),
         "workflow_name": _string(item.get("workflowName")),
@@ -93,6 +97,30 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
         "root_parent_job_id": item.get("rootParentJobId"),
         "parent_job_id": item.get("parentJobId"),
         "previous_job_id": item.get("previousJobId"),
+    }
+
+
+def _action_evidence(message: Any) -> dict[str, Any]:
+    """Record explicit Action skips without asserting the whole Workflow scope."""
+    text = message if isinstance(message, str) else ""
+    requested = set(re.findall(r"Request to run the enabled action ['\"]([^'\"]+)['\"]", text, re.I))
+    skipped = set()
+    for name in requested:
+        escaped = re.escape(name)
+        configured = re.search(
+            r"Request to run the enabled action ['\"]" + escaped
+            + r"['\"] that has level configured as ['\"]skip['\"]", text, re.I,
+        )
+        not_running = re.search(
+            r"Not running action ['\"]" + escaped
+            + r"['\"] because either the schedule says to skip it today", text, re.I,
+        )
+        if configured and not_running:
+            skipped.add(name)
+    return {
+        "requested_actions": sorted(requested),
+        "skipped_actions": sorted(skipped),
+        "scope": "message_declared_actions_only",
     }
 
 
@@ -392,7 +420,7 @@ def _job_status(
 ) -> str:
     completion = completion_status.lower()
     normalized_state = state.lower()
-    if completion in {"running", "active", "queued", "pending"}:
+    if completion in {"running", "active", "started", "sessionactive", "queued", "pending"}:
         return "running"
     if completion in {"canceled", "cancelled", "aborted"}:
         return "canceled"
@@ -400,7 +428,7 @@ def _job_status(
         return "success"
     if completion in {"failed", "failure"}:
         return "failed"
-    if normalized_state in {"running", "active", "queued", "pending"}:
+    if normalized_state in {"running", "active", "started", "sessionactive", "queued", "pending"}:
         return "running"
     if normalized_state in {"canceled", "cancelled", "aborted"}:
         return "canceled"

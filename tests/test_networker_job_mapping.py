@@ -1,6 +1,7 @@
 """Synthetic list-API records only: no NetWorker/Elasticsearch connection."""
 
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 
@@ -211,14 +212,20 @@ def test_reclassification_keeps_id_but_old_index_document_can_coexist(old_domain
     assert old["_op_type"] == new["_op_type"] == "index"
 
 
-def test_version_five_put_body_matches_template_and_preserves_step_one_contract():
+def test_current_template_preserves_historical_version_five_template_contract():
     root = Path(__file__).resolve().parents[1]
     template = json.loads((root / "config/elasticsearch_networker_job_run_index_template.example.json").read_text(encoding="utf-8"))
-    request = (root / "docs/networker_job_mapping_step2_template_put.http").read_text(encoding="utf-8")
-    lines = [line for line in request.splitlines() if not line.startswith("#")]
-    assert lines[0] == "PUT _index_template/nw-job-run-template"
-    assert json.loads("\n".join(lines[1:])) == template
-    assert template["version"] == 5
+    assert template["version"] == 6
+    historic = json.loads(json.dumps(template))
+    historic["version"] = 5
+    payload = historic["template"]["mappings"]["properties"]["payload"]["properties"]
+    assert payload.pop("adhoc_job") == {"type": "boolean"}
+    assert payload.pop("message") == {"type": "text", "index": False}
+    assert payload.pop("execution_evidence") == {"type": "object", "enabled": False}
+    # Canonical v5 JSON from HEAD 41616c4d2e78093f33b8983d0e022ce907ca8fea.
+    # Freeze every existing field and setting without depending on ignored docs or Git at runtime.
+    canonical = json.dumps(historic, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    assert hashlib.sha256(canonical).hexdigest() == "8d01025a8f06ecb291806573b8794f76c6c7f652d4424365ea9ec96cb0150d6f"
     assert template["priority"] == 400
     assert template["composed_of"] == ["nw-common-mappings"]
     assert template["template"]["mappings"]["dynamic"] is False
