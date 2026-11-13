@@ -1,0 +1,59 @@
+{
+  "timezone": "Asia/Seoul",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "nw_source",
+        "label": "NetWorker",
+        "type": "custom",
+        "query": "core,chnl,info",
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "current": {
+          "text": "core",
+          "value": "core"
+        },
+        "options": [
+          {
+            "text": "core",
+            "value": "core",
+            "selected": true
+          },
+          {
+            "text": "chnl",
+            "value": "chnl",
+            "selected": false
+          },
+          {
+            "text": "info",
+            "value": "info",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "nw_generation",
+        "type": "query",
+        "datasource": {
+          "type": "elasticsearch",
+          "uid": "REPLACE_EXISTING_CURRENT_DATASOURCE_UID"
+        },
+        "query": "{\"find\":\"terms\",\"field\":\"generation\",\"query\":\"document_kind:daily_summary AND summary_role:head AND source_networker:${nw_source:lucene} AND window_end:{now-24h TO now]\",\"size\":2}",
+        "refresh": 2,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "hide": 2,
+        "skipUrlSync": true,
+        "current": {},
+        "options": []
+      }
+    ]
+  }
+}

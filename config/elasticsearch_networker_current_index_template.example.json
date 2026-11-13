@@ -1,0 +1,180 @@
+{
+  "index_patterns": [
+    "nw-current-core",
+    "nw-current-chnl",
+    "nw-current-info"
+  ],
+  "priority": 450,
+  "version": 3,
+  "_meta": {
+    "description": "Daily Workflow results only; no source-index JOIN required by Grafana"
+  },
+  "template": {
+    "mappings": {
+      "dynamic": false,
+      "properties": {
+        "document_kind": {
+          "type": "keyword"
+        },
+        "source_networker": {
+          "type": "keyword"
+        },
+        "backup_day": {
+          "type": "keyword"
+        },
+        "policy_name": {
+          "type": "keyword"
+        },
+        "workflow_name": {
+          "type": "keyword"
+        },
+        "workflow_job_id": {
+          "type": "keyword"
+        },
+        "source_completion_status": {
+          "type": "keyword"
+        },
+        "source_state": {
+          "type": "keyword"
+        },
+        "source_status_normalized": {
+          "type": "keyword"
+        },
+        "dashboard_result": {
+          "type": "keyword"
+        },
+        "result_detail": {
+          "type": "keyword"
+        },
+        "workflow_kind": {
+          "type": "keyword"
+        },
+        "attribution": {
+          "type": "keyword"
+        },
+        "selection_reason": {
+          "type": "keyword"
+        },
+        "execution_ids": {
+          "type": "keyword"
+        },
+        "analysis_reasons": {
+          "type": "keyword"
+        },
+        "evidence_reference": {
+          "type": "keyword"
+        },
+        "generation": {
+          "type": "keyword"
+        },
+        "data_status": {
+          "type": "keyword"
+        },
+        "data_reasons": {
+          "type": "keyword"
+        },
+        "coverage_reference": {
+          "type": "keyword"
+        },
+        "success_rate_scope": {
+          "type": "keyword"
+        },
+        "duration_definition": {
+          "type": "keyword"
+        },
+        "window_start": {
+          "type": "date"
+        },
+        "window_end": {
+          "type": "date"
+        },
+        "updated_at": {
+          "type": "date"
+        },
+        "attempted_at": {
+          "type": "date"
+        },
+        "start_time": {
+          "type": "date"
+        },
+        "end_time": {
+          "type": "date"
+        },
+        "last_actual_success_at": {
+          "type": "date"
+        },
+        "success_count": {
+          "type": "long"
+        },
+        "failure_count": {
+          "type": "long"
+        },
+        "warning_success_count": {
+          "type": "long"
+        },
+        "duration_sample_count": {
+          "type": "long"
+        },
+        "excluded_workflow_count": {
+          "type": "long"
+        },
+        "excluded_execution_count": {
+          "type": "long"
+        },
+        "unconfirmed_workflow_count": {
+          "type": "long"
+        },
+        "workflow_count": {
+          "type": "long"
+        },
+        "observed_execution_count": {
+          "type": "long"
+        },
+        "success_rate": {
+          "type": "double"
+        },
+        "duration_seconds": {
+          "type": "double"
+        },
+        "duration_seconds_sum": {
+          "type": "double"
+        },
+        "duration_seconds_average": {
+          "type": "double"
+        },
+        "warning": {
+          "type": "boolean"
+        },
+        "workflow_kind_confirmed": {
+          "type": "boolean"
+        },
+        "action_evidence": {
+          "type": "object",
+          "enabled": false
+        },
+        "report_day": {
+          "type": "keyword"
+        },
+        "execution_results": {
+          "type": "object",
+          "enabled": false
+        },
+        "source_observed_at": {
+          "type": "date"
+        },
+        "detail_ids": {
+          "type": "keyword"
+        },
+        "aggregation_status": {
+          "type": "keyword"
+        },
+        "coverage_status": {
+          "type": "keyword"
+        },
+        "summary_role": {
+          "type": "keyword"
+        }
+      }
+    }
+  }
+}

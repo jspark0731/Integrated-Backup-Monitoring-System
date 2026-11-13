@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 import logging
@@ -53,6 +54,63 @@ class CollectionSchedulesConfig:
 
 
 @dataclass(frozen=True)
+class NetworkerCurrentConfig:
+    enabled: bool = False
+    rebuild_days: int = 7
+    page_size: int = 500
+    max_hits: int = 200000
+    # Execution exceptions are keyed by source:job_id and validated against start_time/reference.
+    run_evidence: dict[str, dict[str, Any]] = field(default_factory=dict)
+    coverage: dict[str, str] = field(default_factory=dict)
+    # Repeated rules may select a day basis, never a fixed backup_day.
+    workflow_rules: tuple[dict[str, Any], ...] = ()
+    include_unmapped: bool = True
+
+    def __post_init__(self) -> None:
+        if (type(self.enabled) is not bool or type(self.include_unmapped) is not bool
+                or any(type(v) is not int for v in (self.rebuild_days, self.page_size, self.max_hits))
+                or not 1 <= self.rebuild_days <= 366 or not 1 <= self.page_size <= 1000 or self.max_hits < 1):
+            raise ValueError("invalid networker_current read limits")
+        if not isinstance(self.run_evidence, dict) or not isinstance(self.coverage, dict):
+            raise ValueError("networker_current evidence must be mappings")
+        if any(not isinstance(value, str) or not value.strip() for value in self.coverage.values()):
+            raise ValueError("networker_current coverage requires nonempty evidence references")
+        if any(not isinstance(key, str) or not isinstance(value, dict) for key, value in self.run_evidence.items()):
+            raise ValueError("networker_current run evidence requires string keys and mapping values")
+        if not isinstance(self.workflow_rules, (list, tuple)):
+            raise ValueError("networker_current workflow_rules must be a list")
+        for position, rule in enumerate(self.workflow_rules):
+            if isinstance(rule, dict) and "backup_day" in rule:
+                raise ValueError(
+                    f"networker_current.workflow_rules[{position}].backup_day: "
+                    "backup_day는 run_evidence의 실행별 예외에서만 사용할 수 있음"
+                )
+            required = ("source_networker", "policy_name", "workflow_name", "reference", "effective_from")
+            if not isinstance(rule, dict) or any(not isinstance(rule.get(k), str) or not rule[k].strip() for k in required):
+                raise ValueError("workflow_rules require exact Workflow identity, reference and effective_from")
+            if rule["source_networker"] not in {"core", "chnl", "info"}:
+                raise ValueError("invalid workflow rule source")
+            if rule.get("workflow_kind") not in {None, "backup", "clone", "mixed"}:
+                raise ValueError("invalid workflow rule kind")
+            if rule.get("backup_day_basis") not in {None, "start_window", "completion_window"}:
+                raise ValueError("invalid workflow rule backup_day_basis")
+            bounds = []
+            for key in ("effective_from", "effective_until"):
+                value = rule.get(key)
+                if value is None:
+                    continue
+                try:
+                    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    if parsed.tzinfo is None:
+                        raise ValueError("offset required")
+                    bounds.append(parsed)
+                except (AttributeError, TypeError, ValueError) as exc:
+                    raise ValueError("workflow rule validity requires offset-aware timestamps") from exc
+            if len(bounds) == 2 and bounds[1] <= bounds[0]:
+                raise ValueError("invalid workflow rule validity range")
+
+
+@dataclass(frozen=True)
 class ElasticsearchConfig:
     enabled: bool = False
     hosts: tuple[str, ...] = ("http://elasticsearch:9200",)
@@ -61,6 +119,7 @@ class ElasticsearchConfig:
     password: str | None = None
     verify_certs: bool = True
     ca_certs: str | None = None
+    networker_current: NetworkerCurrentConfig = field(default_factory=NetworkerCurrentConfig)
 
     @property
     def is_ready(self) -> bool:
@@ -292,6 +351,7 @@ def _parse_elasticsearch(raw: dict[str, Any]) -> ElasticsearchConfig:
         password=_optional_secret(raw, "password"),
         verify_certs=bool(raw.get("verify_certs", True)),
         ca_certs=raw.get("ca_certs"),
+        networker_current=NetworkerCurrentConfig(**(raw.get("networker_current") or {})),
     )
 
 

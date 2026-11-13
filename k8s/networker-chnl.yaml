@@ -18,6 +18,17 @@ data:
       password_file: /apps/secrets/elasticsearch/password
       verify_certs: true
       ca_certs: /apps/secrets/elasticsearch/ca.crt
+      networker_current:
+        # Enable after the current template/mapping and permissions are ready.
+        enabled: false
+        rebuild_days: 7
+        page_size: 500
+        max_hits: 200000
+        include_unmapped: true
+        # Verified source/Policy/Workflow rules; no per-run input is required.
+        workflow_rules: []
+        run_evidence: {}
+        coverage: {}
     collectors:
       - name: networker_chnl
         type: Networker

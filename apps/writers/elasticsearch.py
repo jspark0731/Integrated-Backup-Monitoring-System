@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+import asyncio
+from datetime import datetime, timezone
 import logging
 from typing import Any
 
@@ -25,6 +27,7 @@ class ElasticsearchWriter:
         self.config = config
         self.client: Any | None = None
         self._async_bulk: Any | None = None
+        self._current_locks = {source: asyncio.Lock() for source in ("core", "chnl", "info")}
         if config.is_ready:
             from elasticsearch import AsyncElasticsearch
             from elasticsearch.helpers import async_bulk
@@ -59,6 +62,8 @@ class ElasticsearchWriter:
                 chunk_size=BULK_CHUNK_SIZE,
                 max_chunk_bytes=BULK_MAX_CHUNK_BYTES,
             )
+            if isinstance(bulk_result, tuple) and bulk_result[1]:
+                raise RuntimeError("source_bulk_contains_errors")
             document_count = bulk_result[0] if isinstance(bulk_result, tuple) else "unknown"
             LOGGER.info(
                 "Elasticsearch write collectors=%s document_count=%s collection_status=success",
@@ -69,6 +74,33 @@ class ElasticsearchWriter:
         except Exception:
             LOGGER.exception("Failed to write collector results to Elasticsearch")
             ELASTICSEARCH_WRITE_TOTAL.labels("error").inc()
+            return
+        if self.config.networker_current.enabled:
+            await self._write_networker_current(results)
+
+    async def _write_networker_current(self, results: list[CollectionResult]) -> None:
+        from apps.writers.networker_current import NetworkerDailyCurrent
+
+        for source in ("core", "chnl", "info"):
+            batch = [r for r in results if r.target_type == "Networker"
+                     and r.collection_class in {"jobs", "fast"}
+                     and isinstance(r.payload.get("summary"), dict)
+                     and r.payload["summary"].get("source_networker") == source]
+            if not batch:
+                continue
+            incoming = []
+            for result in batch:
+                incoming.extend({"_index": a["_index"], "_id": a["_id"], "_source": a["_source"]}
+                                for a in self._iter_actions_for_result(result)
+                                if a["_source"].get("document_type") == "job-run")
+            healthy = all(r.ok and not r.skipped and r.payload.get("collection_status") == "success" for r in batch)
+            async with self._current_locks[source]:
+                try:
+                    publisher = NetworkerDailyCurrent(self.client, self._async_bulk, self.config.networker_current)
+                    await publisher.publish(source, incoming, datetime.now(timezone.utc), healthy)
+                except Exception:
+                    LOGGER.exception("NetWorker daily current failed source=%s; previous generation retained", source)
+                    ELASTICSEARCH_WRITE_TOTAL.labels("error").inc()
 
     async def close(self) -> None:
         if self.client:
