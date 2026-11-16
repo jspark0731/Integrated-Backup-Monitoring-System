@@ -215,10 +215,11 @@ def test_reclassification_keeps_id_but_old_index_document_can_coexist(old_domain
 def test_current_template_preserves_historical_version_five_template_contract():
     root = Path(__file__).resolve().parents[1]
     template = json.loads((root / "config/elasticsearch_networker_job_run_index_template.example.json").read_text(encoding="utf-8"))
-    assert template["version"] == 6
+    assert template["version"] == 7
     historic = json.loads(json.dumps(template))
     historic["version"] = 5
     payload = historic["template"]["mappings"]["properties"]["payload"]["properties"]
+    assert payload.pop("hostname_source") == {"type": "keyword"}
     assert payload.pop("adhoc_job") == {"type": "boolean"}
     assert payload.pop("message") == {"type": "text", "index": False}
     assert payload.pop("execution_evidence") == {"type": "object", "enabled": False}

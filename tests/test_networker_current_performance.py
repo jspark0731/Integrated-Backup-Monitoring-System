@@ -117,6 +117,20 @@ BASELINE_HASHES = {
 @pytest.mark.parametrize("name", sorted(compatibility_cases()))
 def test_complete_output_matches_pre_optimization_baseline(name):
     output = processor.build_daily(*compatibility_cases()[name])
+    # New hostname evidence intentionally participates in generation. Compare the
+    # complete OLD field contract against the captured baseline, without changing
+    # any outcome, reasons, selection, attribution or duration expectations.
+    for summary, rows in output.values():
+        for row in rows:
+            for field in ("hostname", "hostnames", "hostname_status", "hostname_sources"):
+                row.pop(field)
+        semantic = [{k: v for k, v in row.items() if k not in {
+            "source_observed_at", "document_kind", "generation", "updated_at", "window_start", "window_end"}}
+            for row in rows]
+        generation = processor.digest([semantic, {k: v for k, v in summary.items() if k not in {"generation", "updated_at"}}])[:24]
+        summary["generation"] = generation
+        for row in rows:
+            row["generation"] = generation
     actual = hashlib.sha256(json.dumps(output, sort_keys=True).encode()).hexdigest()
     assert actual == BASELINE_HASHES[name]
 
@@ -207,9 +221,10 @@ async def test_computation_is_off_loop_and_io_and_publication_order_stay_on_loop
         release.set()
         await task
     kinds = [a["_source"]["document_kind"] for batch in es.bulks for a in batch]
-    assert kinds == ["workflow_result", "daily_summary", "daily_summary"]
-    roles = [a["_source"].get("summary_role") for batch in es.bulks for a in batch]
-    assert roles == [None, "generation", "head"]
+    daily = [a for batch in es.bulks for a in batch if a["_source"]["document_kind"] in {"workflow_result", "daily_summary"}]
+    assert [a["_source"]["document_kind"] for a in daily] == ["workflow_result", "daily_summary", "daily_summary"]
+    assert [a["_source"].get("summary_role") for a in daily] == [None, "generation", "head"]
+    assert kinds[-1] == "daily_policy_host"
 
 
 @pytest.mark.asyncio

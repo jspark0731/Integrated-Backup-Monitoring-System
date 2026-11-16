@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 import hashlib
 import json
+from urllib.parse import quote
 from typing import Any
 
 from apps.core.config import NetworkerCurrentConfig
@@ -218,6 +219,129 @@ def classify(job: dict, proof: dict, children: list[dict], source: str) -> tuple
     return result, detail, kind, reasons
 
 
+def hostname_evidence(job: dict, candidates: list[dict], source: str) -> dict:
+    """Explicit Workflow client fields or client names on validated Save descendants.
+
+    Legacy Saves have no provenance marker: use their stored normalized client
+    fields, never a bare runOnHost value or a Workflow/Action execution host.
+    """
+    names, origins = set(), set()
+
+    def target(p, *, saved=False):
+        origin = p.get("hostname_source")
+        explicit = origin in ("clientName", "clientHostname")
+        if not explicit and not (saved and origin in (None, "", "save_job.runOnHost")):
+            return None, None, set(), False
+        values = [p.get(k) for k in ("client_name", "client_hostname", "_document_client_hostname")]
+        claims = {v.strip().lower().rstrip(".") for v in values if isinstance(v, str) and v.strip().rstrip(".")}
+        invalid = any(v is not None and v != "" and not isinstance(v, str) for v in values)
+        # For the confirmed Save fallback path, a contradictory execution host
+        # must not silently win over (or be ignored beside) normalized client data.
+        if saved and not explicit:
+            host = p.get("run_on_host")
+            if isinstance(host, str) and host.strip():
+                normalized = host.strip().lower().rstrip(".")
+                if claims and claims != {normalized}:
+                    claims.add(normalized)
+                    invalid = True
+            elif host is not None and host != "" and not isinstance(host, str):
+                invalid = True
+        if len(claims) != 1 or invalid:
+            return None, None, claims, invalid or len(claims) > 1
+        return next(iter(claims)), origin or "save_job.stored_client", claims, False
+
+    def include(p, *, saved=False):
+        value, origin, _, _ = target(p, saved=saved)
+        if value:
+            names.add(value)
+            origins.add(origin)
+
+    include(job)
+    start, end = timestamp(job.get("start_time")), timestamp(job.get("end_time"))
+    observations = defaultdict(set)
+    conflicting = set()
+    for c in candidates:
+        if c.get("source_networker") == source and c.get("type", "").lower() == "save job":
+            _, _, claims, invalid = target(c, saved=True)
+            identity = str(c.get("job_id"))
+            observations[identity].update(claims)
+            if invalid:
+                conflicting.add(identity)
+    actions = {}
+    for c in candidates:
+        if (c.get("source_networker") == source and str(c.get("root_parent_job_id")) == str(job["job_id"])
+                and str(c.get("parent_job_id")) == str(job["job_id"])
+                and c.get("type", "").lower() == "backup action job"):
+            cs, ce = timestamp(c.get("start_time")), timestamp(c.get("end_time"))
+            if start and cs and cs >= start and (not end or ce and cs <= ce <= end):
+                actions.setdefault(str(c.get("job_id")), []).append(c)
+    for c in candidates:
+        if (c.get("source_networker") != source or c.get("type", "").lower() != "save job"
+                or str(c.get("root_parent_job_id")) != str(job["job_id"])):
+            continue
+        parents = actions.get(str(c.get("parent_job_id")), [])
+        # Conflicting parent observations are not a hostname attribution proof.
+        intervals = {(p.get("start_time"), p.get("end_time")) for p in parents}
+        if len(intervals) != 1:
+            continue
+        parent = parents[0]
+        cs, ce = timestamp(c.get("start_time")), timestamp(c.get("end_time"))
+        ps, pe = timestamp(parent.get("start_time")), timestamp(parent.get("end_time"))
+        if (str(c.get("job_id")) not in conflicting and len(observations[str(c.get("job_id"))]) <= 1
+                and cs and ps and cs >= ps
+                and (not end or ce and cs <= ce <= end) and (not pe or ce and ce <= pe)):
+            include(c, saved=True)
+    ordered = sorted(n for n in names if n)
+    return {"hostname": ordered[0] if len(ordered) == 1 else None, "hostnames": ordered,
+            "hostname_status": "identified" if len(ordered) == 1 else "multiple" if ordered else "unidentified",
+            "hostname_sources": sorted(origins)}
+
+
+def policy_host_key(source: str, policy: str, hostname: str) -> str:
+    # Escaping avoids collisions such as Policy A-B / host C vs A / host B-C.
+    return ":".join(quote(v, safe="") for v in (source, policy, hostname))
+
+
+def daily_failure_view(summary: dict, rows: list[dict]) -> dict:
+    """ONE document per day. Terms doc_count is an exact distinct failure-day count."""
+    keys = {policy_host_key(r["source_networker"], r["policy_name"], host)
+            for r in rows if r["dashboard_result"] == "failed" and r.get("policy_name")
+            for host in r.get("hostnames", [])}
+    return {k: summary.get(k) for k in (
+        "source_networker", "backup_day", "window_start", "window_end", "updated_at", "generation",
+        "data_status", "data_reasons", "coverage_status", "aggregation_status")} | {
+        "document_kind": "daily_policy_host",
+        "projection_status": "ready" if summary.get("failure_count") is not None else "unavailable",
+        "failed_policy_host_keys": sorted(keys), "failed_policy_host_count": len(keys),
+        "unidentified_failure_count": sum(r["dashboard_result"] == "failed" and not r.get("hostnames") for r in rows),
+        "failure_count": summary.get("failure_count"), "workflow_count": summary.get("workflow_count")}
+
+
+def running_candidates(hits: list[dict], source: str) -> dict[str, dict]:
+    """Reuse the same O(N + connected candidates) relationship index as daily work."""
+    children, roots, parents = [], defaultdict(list), defaultdict(list)
+    for hit in hits:
+        d, p = hit.get("_source", {}), hit.get("_source", {}).get("payload", {})
+        if d.get("source_networker") != source:
+            continue
+        i = len(children)
+        children.append(p | {"source_networker": source,
+                             "_document_client_hostname": d["client"].get("hostname")
+                             if isinstance(d.get("client"), dict) else None})
+        roots[str(p.get("root_parent_job_id"))].append(i)
+        parents[str(p.get("parent_job_id"))].append(i)
+    out = {}
+    for job, issues in select_runs(hits, source):
+        identity = str(job["job_id"])
+        positions = set(roots.get(identity, ())) | set(parents.get(identity, ()))
+        for i in tuple(positions):
+            if children[i].get("type", "").lower() == "backup action job":
+                positions.update(parents.get(str(children[i].get("job_id")), ()))
+        out[identity] = dict(job, **hostname_evidence(job, [children[i] for i in sorted(positions)], source),
+                             relationship_issues=issues)
+    return out
+
+
 def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
                 config: NetworkerCurrentConfig, *, input_reasons: list[str] | None = None) -> dict[str, tuple[dict, list[dict]]]:
     groups = defaultdict(list)
@@ -228,7 +352,9 @@ def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
         p = d.get("payload", {})
         if d.get("source_networker") == source and isinstance(p, dict):
             position = len(children)
-            children.append(p | {"source_networker": source})
+            children.append(p | {"source_networker": source,
+                                 "_document_client_hostname": d["client"].get("hostname")
+                                 if isinstance(d.get("client"), dict) else None})
             by_root[(source, str(p.get("root_parent_job_id")))].append(position)
             by_parent[(source, str(p.get("parent_job_id")))].append(position)
     latest = max(days)
@@ -283,6 +409,7 @@ def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
             "analysis_reasons": sorted(set(reasons)), "evidence_reference": proof.get("reference"),
             "workflow_kind_confirmed": kind != "unknown",
             "action_evidence": _action_evidence(job.get("message")),
+            **hostname_evidence(job, candidates, source),
         }
         key = (day, policy, workflow) if policy and workflow and attribution != "unresolved" else (day, "unresolved", job["job_id"])
         groups[key].append(record)

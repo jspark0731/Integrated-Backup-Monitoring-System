@@ -1,7 +1,7 @@
 {
   "index_patterns": ["nw-*-job-run-*"],
   "priority": 400,
-  "version": 6,
+  "version": 7,
   "composed_of": ["nw-common-mappings"],
   "_meta": {
     "description": "NetWorker job-run analytics documents"
@@ -80,6 +80,7 @@
             "protection_group": {"type": "keyword"},
             "workflow_run_key": {"type": "keyword"},
             "client_name": {"type": "keyword"},
+            "hostname_source": {"type": "keyword"},
             "run_on_host": {"type": "keyword"},
             "start_time": {"type": "date"},
             "end_time": {"type": "date"},

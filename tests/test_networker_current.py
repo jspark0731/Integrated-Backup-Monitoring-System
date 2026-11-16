@@ -493,7 +493,8 @@ async def test_writer_actual_write_path_generates_current_after_original_bulk(mo
     assert any(a["_index"].startswith("nw-ops-raw-") for a in es.bulks[0])
     assert any(a["_index"] == "nw-core-job-run-2026-11" for a in es.bulks[0])
     assert es.store[("nw-current-core", "daily:core:" + DAY)]["success_count"] == 1
-    assert es.bulks[-1][0]["_id"] == "daily:core:" + DAY
+    assert es.bulks[-1][0]["_id"] == "policy-host:core:" + DAY
+    assert es.bulks[-2][0]["_id"] == "daily:core:" + DAY
 
 
 def test_kubernetes_configs_and_mapping_cover_current_without_lookup_mode(tmp_path, monkeypatch):
@@ -872,7 +873,8 @@ async def test_selected_a_summary_and_details_remain_readable_after_b_publicatio
     assert all(d["found"] and d["_source"]["generation"] == generation_a for d in details_a)
     assert read_a["success_count"] == sum(d["_source"]["dashboard_result"] == "success" for d in details_a)
     assert read_a["failure_count"] == sum(d["_source"]["dashboard_result"] == "failed" for d in details_a)
-    assert {d.get("document_kind") for (i, _), d in es.store.items() if i == "nw-current-core"} == {"daily_summary", "workflow_result"}
+    assert {d.get("document_kind") for (i, _), d in es.store.items() if i == "nw-current-core"} == {
+        "daily_summary", "workflow_result", "running_status", "daily_policy_host"}
     assert all(a["_index"] == "nw-current-core" for actions in es.bulks for a in actions)
 
 

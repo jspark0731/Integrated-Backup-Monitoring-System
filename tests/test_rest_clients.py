@@ -88,8 +88,10 @@ async def test_networker_query_offset_survives_httpx_encoding(
     start = "2026-10-31T14:55:00+00:00" if minutes == 10 else "2026-10-31T14:45:00+00:00"
     end = "2026-10-31T15:05:00+00:00"
     expected = f'{field}:["{start}" TO "{end}"]'
-    assert len(requests) == 2
-    for request in requests:
+    ranged = [request for request in requests if request.url.params.get("q", "").startswith(field + ":[")]
+    assert len(ranged) == 2
+    assert len(requests) == (4 if collection_class == "jobs" else 2)
+    for request in ranged:
         assert request.url.path == f"/nwrestapi/v3/global/{collection_class}"
         assert dict(request.url.params) == {"q": expected}
         encoded = request.url.query.decode("ascii")
@@ -97,7 +99,7 @@ async def test_networker_query_offset_survives_httpx_encoding(
         assert parse_qs(encoded) == {"q": [expected]}
         assert encoded.count("%2B00%3A00") == 2
         assert "%252B" not in encoded
-    assert requests[0].url == requests[1].url
+    assert ranged[0].url == ranged[1].url
     assert local_payload == utc_payload
     window = local_payload["_query_window"]
     assert window["start"] == start
@@ -200,6 +202,8 @@ async def test_networker_uses_basic_auth_without_bearer_token() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         authorization_headers.append(request.headers.get("Authorization"))
         requests.append((request.url.path, dict(request.url.params)))
+        if request.url.params.get("q", "").startswith("state:"):
+            return httpx.Response(200, json={"jobs": []})
         if request.url.path.endswith("/jobs"):
             return httpx.Response(200, json={"jobs": [{"id": "done-1"}]})
         return httpx.Response(200, json={"backups": []})
@@ -225,11 +229,12 @@ async def test_networker_uses_basic_auth_without_bearer_token() -> None:
     )
     await client.close()
 
-    assert set(payloads) == {"jobs", "backups", "_query_window"}
+    assert set(payloads) == {"jobs", "backups", "_query_window", "_jobs_collection"}
     assert [item["id"] for item in payloads["jobs"]["jobs"]] == ["done-1"]
     assert [path for path, _ in requests] == [
         "/nwrestapi/v3/global/jobs",
         "/nwrestapi/v3/global/backups",
+        "/nwrestapi/v3/global/jobs",
     ]
     assert requests[0][1]["q"] == (
         'endTime:["2026-08-28T12:20:00+00:00" TO "2026-08-28T12:30:00+00:00"]'
@@ -274,7 +279,7 @@ async def test_networker_spaces_sequential_requests(monkeypatch) -> None:
     await client.fetch_payloads("fast")
     await client.close()
 
-    assert sleeps == [30]
+    assert sleeps == [30, 30]
 
 
 @pytest.mark.asyncio
@@ -310,12 +315,13 @@ async def test_networker_uses_class_specific_endpoints_and_windows() -> None:
 
     assert [path for path, _ in requests] == [
         "/nwrestapi/v3/global/jobs",
+        "/nwrestapi/v3/global/jobs",
         "/nwrestapi/v3/global/backups",
     ]
     assert requests[0][1]["q"] == (
         'endTime:["2026-08-28T12:20:00+00:00" TO "2026-08-28T12:30:00+00:00"]'
     )
-    assert requests[1][1]["q"] == (
+    assert requests[2][1]["q"] == (
         'saveTime:["2026-08-28T12:10:00+00:00" TO "2026-08-28T12:30:00+00:00"]'
     )
     assert jobs["_query_window"]["minutes"] == 10
@@ -388,8 +394,9 @@ async def test_networker_http_500_retries_only_bounded_filtered_request(
     payloads = await client.fetch_payloads("jobs")
     await client.close()
 
-    assert len(requests) == 2
-    assert all(params["q"].startswith('endTime:[') for params in requests)
+    assert len(requests) == 4
+    assert all(params["q"].startswith('endTime:[') for params in requests[:2])
+    assert all(params["q"] == "state:Active,Started,SessionActive,Queued" for params in requests[2:])
     assert all("fl" not in params for params in requests)
     assert "jobs" in payloads[ERRORS_KEY]
 
@@ -467,7 +474,7 @@ async def test_networker_http_429_retries_with_backoff(monkeypatch) -> None:
     payloads = await client.fetch_payloads("jobs")
     await client.close()
 
-    assert attempts == 3
+    assert attempts == 4
     assert sleeps == [1.0, 2.0]
     assert "jobs" in payloads
 

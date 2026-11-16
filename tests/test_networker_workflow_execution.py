@@ -171,7 +171,7 @@ def test_failed_workflow_without_backup_evidence_keeps_its_source_failure():
 def test_minimal_mapping_contains_only_retained_evidence_fields():
     template = json.loads(Path("config/elasticsearch_networker_job_run_index_template.example.json").read_text(encoding="utf-8"))
     props = template["template"]["mappings"]["properties"]["payload"]["properties"]
-    assert template["version"] == 6
+    assert template["version"] == 7
     assert props["adhoc_job"] == {"type": "boolean"}
     assert props["message"] == {"type": "text", "index": False}
     assert props["execution_evidence"] == {"type": "object", "enabled": False}

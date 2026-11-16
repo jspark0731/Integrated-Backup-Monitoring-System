@@ -5,9 +5,9 @@
     "nw-current-info"
   ],
   "priority": 450,
-  "version": 3,
+  "version": 4,
   "_meta": {
-    "description": "Daily Workflow results only; no source-index JOIN required by Grafana"
+    "description": "Daily Workflow results, live executions and daily Policy-host failure keys; current-only dashboards"
   },
   "template": {
     "mappings": {
@@ -173,6 +173,55 @@
         },
         "summary_role": {
           "type": "keyword"
+        },
+        "hostname": {
+          "type": "keyword"
+        },
+        "hostnames": {
+          "type": "keyword"
+        },
+        "hostname_status": {
+          "type": "keyword"
+        },
+        "hostname_sources": {
+          "type": "keyword"
+        },
+        "execution_status": {
+          "type": "keyword"
+        },
+        "is_running": {
+          "type": "boolean"
+        },
+        "state_reason": {
+          "type": "keyword"
+        },
+        "last_observed_at": {
+          "type": "date"
+        },
+        "last_attempt_at": {
+          "type": "date"
+        },
+        "collection_observed_at": {
+          "type": "date"
+        },
+        "running_count": {
+          "type": "long"
+        },
+        "unfinished_workflows": {
+          "type": "object",
+          "enabled": false
+        },
+        "projection_status": {
+          "type": "keyword"
+        },
+        "failed_policy_host_keys": {
+          "type": "keyword"
+        },
+        "failed_policy_host_count": {
+          "type": "long"
+        },
+        "unidentified_failure_count": {
+          "type": "long"
         }
       }
     }

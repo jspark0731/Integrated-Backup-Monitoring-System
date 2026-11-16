@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from dataclasses import replace
 
 from apps.clients.networker_rest_client import NetworkerRestClient
 from apps.clients.rest_client import endpoint_errors
@@ -21,6 +22,16 @@ class NetworkerRestCollector(BaseCollector):
     def __init__(self, config) -> None:
         super().__init__(config)
         self.client = NetworkerRestClient(config)
+
+    async def collect(self, collection_class="fast"):
+        result = await super().collect(collection_class)
+        if not result.ok and not result.skipped and collection_class in {"fast", "jobs"}:
+            # Even a whole collection failure must reach current availability;
+            # source comes from configuration, never a hostname heuristic.
+            return replace(result, payload=result.payload | {
+                "summary": {"source_networker": self.config.source_networker},
+                "collection_status": "error", "jobs_collection": {"active_success": False}})
+        return result
 
     async def _collect_payload(self) -> dict[str, Any]:
         return await self._collect_payload_for_class("fast")
@@ -50,6 +61,7 @@ class NetworkerRestCollector(BaseCollector):
             "raw": raw,
             "collection_status": "partial" if errors else "success",
             "endpoint_errors": errors,
+            "jobs_collection": raw.get("_jobs_collection"),
         }
 
     async def close(self) -> None:
@@ -103,7 +115,7 @@ def _mark_failed_endpoint_counts_unknown(
     summary: dict[str, Any],
     errors: dict[str, str],
 ) -> None:
-    if "jobs" in errors:
+    if any(key == "jobs" or key.startswith("jobs_") for key in errors):
         summary["job_count"] = None
     if "backups" in errors:
         summary["backup_count"] = None

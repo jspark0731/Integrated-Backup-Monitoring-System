@@ -16,6 +16,10 @@ from apps.core.config import CollectionClass, CollectorConfig
 
 LOGGER = logging.getLogger(__name__)
 RETRY_BACKOFF_SECONDS = 1.0
+ACTIVE_JOB_QUERY = "state:Active,Started,SessionActive,Queued"
+WORKFLOW_CONFIRM_LIMIT = 20
+WORKFLOW_CONFIRM_SECONDS = 30.0
+JOB_PAGE_LIMIT = 100
 
 
 DEFAULT_ENDPOINTS = {
@@ -66,6 +70,13 @@ class NetworkerRestClient:
             timeout_seconds=30,
             max_concurrency=config.rest_max_concurrency,
         )
+        self._unfinished_workflows: dict[str, str | None] = {}
+
+    def remember_workflows(self, workflows: dict[str, str | None]) -> None:
+        """Restore unfinished IDs from current, without assigning any outcome."""
+        for identity, start in workflows.items():
+            if str(identity).isdigit() and int(identity) > 0:
+                self._unfinished_workflows.setdefault(str(identity), start)
 
     async def fetch_payloads(
         self,
@@ -75,6 +86,7 @@ class NetworkerRestClient:
     ) -> dict[str, Any]:
         headers = {"Accept": "application/json"}
         auth = (str(self.config.username), str(self.config.password))
+        self._request_count = 0
 
         endpoints = _endpoints_for_class(
             self.config.endpoints or DEFAULT_ENDPOINTS,
@@ -91,23 +103,34 @@ class NetworkerRestClient:
 
         responses: dict[str, Any] = {}
         errors: dict[str, str] = {}
-        for index, request in enumerate(request_plan):
-            if index and self.config.rest_request_spacing_seconds:
-                await asyncio.sleep(self.config.rest_request_spacing_seconds)
+        completed_pages = 0
+        for request in request_plan:
             try:
-                responses[request.result_name] = await self._get_json(
-                    self._rest.client,
-                    request.endpoint,
-                    headers,
-                    auth,
-                    request.params,
-                )
+                if request.endpoint_name == "jobs":
+                    items, completed_pages = await self._job_pages(request.endpoint, request.params, headers, auth)
+                    responses[request.result_name] = {"jobs": items, "count": len(items)}
+                else:
+                    await self._request_gap()
+                    responses[request.result_name] = await self._get_json(
+                        self._rest.client, request.endpoint, headers, auth, request.params)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 errors[request.result_name] = f"{type(exc).__name__}: {exc}"
 
+        if "jobs" in endpoints:
+            # Keep the historical RAW jobs.jobs[] path, supplementing it with
+            # active observations and bounded individual completion checks.
+            merged, audit = await self._observe_jobs(
+                endpoints["jobs"], responses.get("jobs"), headers, auth, errors)
+            audit["completed_pages"] = completed_pages
+            responses["jobs"] = merged
+        else:
+            audit = None
+
         payloads = _combine_responses(endpoints, responses)
+        if audit is not None:
+            payloads["_jobs_collection"] = audit
         timed_windows = {
             name: {
                 "start": _format_query_time(start),
@@ -124,6 +147,129 @@ class NetworkerRestClient:
             payloads[ERRORS_KEY] = errors
         return payloads
 
+    async def _observe_jobs(self, endpoint, completed, headers, auth, errors):
+        audit = {"completed_success": False, "active_success": False,
+                 "active_pages": 0, "active_count": None, "confirmation_checked": 0,
+                 "confirmation_pending": 0, "unconfirmed_ids": []}
+        try:
+            done = _job_items(completed)
+            audit["completed_success"] = "jobs" not in errors
+        except ValueError:
+            done = []
+            errors.setdefault("jobs", "invalid_jobs_response")
+        active = []
+        try:
+            active, pages = await self._job_pages(endpoint, {"q": ACTIVE_JOB_QUERY}, headers, auth)
+            if any(not isinstance(j.get("type"), str) or not j["type"] or not j.get("state") for j in active):
+                raise ValueError("incomplete_active_job_fields")
+            audit.update(active_success=True, active_pages=pages, active_count=len(active))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            errors["jobs_active"] = type(exc).__name__
+            active = []
+        all_jobs = list(done) + active
+        known = {str(j.get("id") or j.get("jobId")) for j in all_jobs}
+        terminal_ids = {str(j.get("id") or j.get("jobId")) for j in all_jobs if _terminal_job(j)}
+        for j in all_jobs:
+            identity = str(j.get("id") or j.get("jobId"))
+            if j.get("type", "").lower() == "workflow job":
+                if identity in terminal_ids:
+                    self._unfinished_workflows.pop(identity, None)
+                else:
+                    self.remember_workflows({identity: j.get("startTime")})
+        pending = [i for i in self._unfinished_workflows if i not in known]
+        # Only reconfirm observed Workflow IDs. Never scan historical jobs or
+        # confirm all Save Jobs. Rotate failures so one missing ID cannot starve others.
+        attempted, confirmation_started = [], time.monotonic()
+        for identity in pending[:WORKFLOW_CONFIRM_LIMIT]:
+            # One existing request (including configured retries/spacing) may
+            # exceed the soft budget; do not start another afterwards.
+            if attempted and time.monotonic() - confirmation_started >= WORKFLOW_CONFIRM_SECONDS:
+                break
+            attempted.append(identity)
+            start = self._unfinished_workflows.pop(identity)
+            self._unfinished_workflows[identity] = start
+            try:
+                await self._request_gap()
+                item = await self._get_json(self._rest.client, endpoint.rstrip("/") + "/" + identity,
+                                            headers, auth, {})
+                if (not isinstance(item, dict) or str(item.get("id") or item.get("jobId")) != identity
+                        or str(item.get("type", "")).lower() != "workflow job"
+                        or start and (not _job_start(start) or _job_start(item.get("startTime")) != _job_start(start))):
+                    raise ValueError("workflow_confirmation_identity_conflict")
+                all_jobs.append(item)
+                if _terminal_job(item):
+                    self._unfinished_workflows.pop(identity, None)
+                audit["confirmation_checked"] += 1
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                errors["jobs_confirm:" + identity] = type(exc).__name__
+                audit["unconfirmed_ids"].append(identity)
+        remaining = [identity for identity in pending if identity not in attempted]
+        audit["confirmation_pending"] = len(remaining)
+        audit["unconfirmed_ids"].extend(remaining)
+        merged = {}
+        for j in all_jobs:
+            key = (str(j.get("id") or j.get("jobId")), j.get("startTime"))
+            old = merged.get(key)
+            if old is None or not _terminal_job(old) or _terminal_job(j):
+                merged[key] = j
+        audit["observed_workflow_ids"] = sorted({str(j.get("id") or j.get("jobId")) for j in merged.values()
+                                                if j.get("type", "").lower() == "workflow job"})
+        return {"jobs": list(merged.values()), "count": len(merged)}, audit
+
+    async def _request_gap(self):
+        if getattr(self, "_request_count", 0) and self.config.rest_request_spacing_seconds:
+            await asyncio.sleep(self.config.rest_request_spacing_seconds)
+        self._request_count = getattr(self, "_request_count", 0) + 1
+
+    async def _job_pages(self, endpoint, params, headers, auth):
+        """Follow server-supplied same-endpoint next links; invent no paging parameters."""
+        out, seen, visited, declared = [], set(), set(), 0
+        for page in range(1, JOB_PAGE_LIMIT + 1):
+            marker = (endpoint, tuple(sorted(params.items())))
+            if marker in visited:
+                raise ValueError("jobs_pagination_cycle")
+            visited.add(marker)
+            await self._request_gap()
+            response = await self._get_json(self._rest.client, endpoint, headers, auth, params,
+                                            reject_continuation=True)
+            items = _job_items(response)
+            for item in items:
+                key = (str(item.get("id") or item.get("jobId")), item.get("startTime"))
+                if key in seen:
+                    raise ValueError("jobs_pagination_duplicate")
+                seen.add(key)
+            out.extend(items)
+            if isinstance(response, dict):
+                count = response.get("count")
+                if count is not None and (type(count) is not int or count < 0):
+                    raise ValueError("invalid_jobs_count")
+                declared = max(declared, count or 0)
+                links = response.get("links", [])
+                if not isinstance(links, list):
+                    raise ValueError("invalid_jobs_links")
+                next_links = [l.get("href") for l in links if isinstance(l, dict) and l.get("rel") == "next"]
+            else:
+                next_links = []
+            if not next_links:
+                if declared > len(out):
+                    raise ValueError("jobs_response_truncated")
+                return out, page
+            if len(next_links) != 1 or not isinstance(next_links[0], str):
+                raise ValueError("invalid_jobs_next_link")
+            following = httpx.URL(urljoin(self._url(endpoint), next_links[0]))
+            origin = httpx.URL(self._url(endpoint))
+            if (following.scheme, following.host, following.port, following.path) != (origin.scheme, origin.host, origin.port, origin.path):
+                raise ValueError("unsafe_jobs_next_link")
+            next_params = dict(following.params)
+            if next_params.get("q") != params.get("q"):
+                raise ValueError("jobs_next_filter_changed")
+            params = next_params
+        raise ValueError("jobs_page_budget_exhausted")
+
     async def close(self) -> None:
         await self._rest.close()
 
@@ -134,6 +280,7 @@ class NetworkerRestClient:
         headers: dict[str, str],
         auth: tuple[str, str] | None,
         params: dict[str, str] | None = None,
+        *, reject_continuation: bool = False,
     ) -> Any:
         max_attempts = max(1, self.config.retries + 1)
         for attempt in range(1, max_attempts + 1):
@@ -154,6 +301,10 @@ class NetworkerRestClient:
                     params=params,
                 )
                 response.raise_for_status()
+                if reject_continuation and response.headers.get("X-NW-CONTINUATION-TOKEN"):
+                    # The known Jobs contract does not document this header.
+                    # Fail closed rather than report a single page as complete.
+                    raise ValueError("unsupported_jobs_continuation")
                 payload = response.json() if response.content else {}
                 LOGGER.info(
                     "NetWorker REST response endpoint=%s q=%r returned_items=%d elapsed_seconds=%.3f status=success",
@@ -275,6 +426,28 @@ def _combine_responses(
     responses: dict[str, Any],
 ) -> dict[str, Any]:
     return {name: responses[name] for name in endpoints if name in responses}
+
+
+def _job_items(response):
+    items = response if isinstance(response, list) else response.get("jobs") if isinstance(response, dict) else None
+    if not isinstance(items, list) or any(not isinstance(j, dict) or not (j.get("id") or j.get("jobId")) for j in items):
+        raise ValueError("invalid_jobs_response")
+    return items
+
+
+def _terminal_job(item):
+    completion = str(item.get("completionStatus") or "").lower()
+    return bool(item.get("endTime")) or completion in {
+        "succeeded", "success", "failed", "failure", "canceled", "cancelled", "aborted", "abandoned",
+        "unknown", "communicationlost", "neverstarted", "didnotrun", "missedtheschedule"}
+
+
+def _job_start(value):
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+    except ValueError:
+        return None
 
 
 def _time_range_query(field: str, start: datetime, end: datetime) -> str:

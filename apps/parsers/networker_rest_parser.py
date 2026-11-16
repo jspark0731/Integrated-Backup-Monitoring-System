@@ -66,6 +66,9 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
     client_name = _string(item.get("clientName")) or _string(item.get("clientHostname"))
     if not client_name and is_save_job:
         client_name = _string(item.get("runOnHost"))
+    hostname_source = ("clientName" if _string(item.get("clientName")) else
+                       "clientHostname" if _string(item.get("clientHostname")) else
+                       "save_job.runOnHost" if client_name and is_save_job else None)
 
     return {
         "server": server,
@@ -87,6 +90,7 @@ def _normalize_job(item: dict[str, Any], server: str, source_networker: str) -> 
         "workflow_name": _string(item.get("workflowName")),
         "protection_group": _protection_group(item.get("command")) if is_save_job else "",
         "client_name": client_name,
+        "hostname_source": hostname_source,
         "run_on_host": _string(item.get("runOnHost")),
         "start_time": _isoformat(start_time),
         "end_time": _isoformat(end_time),

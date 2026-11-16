@@ -145,6 +145,13 @@ class CollectorScheduler:
         async with lock:
             await self._wait_for_networker_cooldown(collector)
             try:
+                restore = getattr(self.writer, "restore_networker_workflows", None)
+                if restore is not None:
+                    try:
+                        await restore(collector, collection_class)
+                    except Exception as exc:
+                        # Restoration must not prevent the original source collection.
+                        LOGGER.warning("Running Workflow restoration failed error_type=%s", type(exc).__name__)
                 result = await collector.collect(collection_class)
                 await self.writer.write_many([result])
                 self._record_result(result)

@@ -15,7 +15,8 @@ from elasticsearch.helpers import BulkIndexError
 
 from apps.core.config import NetworkerCurrentConfig
 from apps.parsers.networker_rest_parser import parse_networker_rest_payload
-from apps.processors.networker_current import RESULTS, build_daily, closed_days, discovered_days, digest, timestamp, window
+from apps.processors.networker_current import (ACTIVE, RESULTS, build_daily, closed_days, daily_failure_view,
+    discovered_days, digest, running_candidates, timestamp, window)
 
 FIELDS = ["source_networker", "document_type", "payload.type", "payload.end_time", "payload.parent_job_id", "payload.root_parent_job_id"]
 LOGGER = logging.getLogger(__name__)
@@ -42,10 +43,13 @@ async def _current_stage(source, name, progress):
 
 
 async def _compute_daily(hits, source, days, now, config, reasons):
+    return await _compute_cpu(partial(build_daily, hits, source, days, now, config, input_reasons=reasons))
+
+
+async def _compute_cpu(function):
     # Existing Writer source locks bound this to one computation per source.
     # Keep this await inside that lock, including cancellation/shutdown cleanup.
-    worker = asyncio.get_running_loop().run_in_executor(None, partial(
-        build_daily, hits, source, days, now, config, input_reasons=reasons))
+    worker = asyncio.get_running_loop().run_in_executor(None, function)
     try:
         result = await asyncio.shield(worker)
         # Deliver pending caller cancellation before the first publication.
@@ -270,6 +274,115 @@ class NetworkerDailyCurrent:
         except NotFoundError:
             return None
 
+    async def current_document(self, source, identity):
+        try:
+            result = response_body(await self.client.get(index=f"nw-current-{source}", id=identity))
+            if result.get("_source", {}).get("source_networker") != source:
+                raise CurrentReadError("current_source_identity_conflict")
+            return result
+        except NotFoundError:
+            return None
+
+    def versioned(self, source, identity, document, old):
+        action = {"_op_type": "index" if old else "create", "_index": f"nw-current-{source}",
+                  "_id": identity, "_source": document}
+        if old:
+            action.update(if_seq_no=old["_seq_no"], if_primary_term=old["_primary_term"])
+        return action
+
+    async def publish_running(self, source, hits, incoming, now, observation):
+        """Fixed execution IDs plus a small unfinished ledger; no historical ES scan."""
+        ledger_id = f"running:{source}"
+        previous = await self.current_document(source, ledger_id)
+        unfinished = dict(previous["_source"].get("unfinished_workflows", {})) if previous else {}
+        jobs = await _compute_cpu(partial(running_candidates, hits, source))
+        requested = set(unfinished)
+        requested.update(str(h["_source"]["payload"].get("job_id")) for h in incoming
+                         if h["_source"].get("source_networker") == source
+                         and h["_source"]["payload"].get("type", "").lower() == "workflow job"
+                         and not timestamp(h["_source"]["payload"].get("end_time"))
+                         and str(h["_source"]["payload"].get("completion_status") or "").lower() not in RESULTS)
+        requested.update(i for i, j in jobs.items() if not timestamp(j.get("end_time"))
+                         and str(j.get("state_raw") or j.get("state") or "").lower() in ACTIVE)
+        observed = set((observation or {}).get("observed_workflow_ids", []))
+        actions, running_count, unknown_count = [], 0, 0
+        for identity in sorted(requested):
+            fixed_id = f"running:{source}:{identity}"
+            old = await self.current_document(source, fixed_id)
+            retained = old["_source"] if old else {}
+            j = jobs.get(identity)
+            if j is None and not retained:
+                # Keep a corrupt/missing tracked row visible as an unresolved ID,
+                # never silently clear the unfinished ledger.
+                j = {"job_id": identity, "start_time": unfinished.get(identity)}
+            completion = str((j or {}).get("completion_status") or "").lower()
+            state = str((j or {}).get("state_raw") or (j or {}).get("state") or "").lower()
+            terminal = bool(j and (timestamp(j.get("end_time")) or completion in RESULTS or state in RESULTS))
+            newer = bool(j and (not timestamp(retained.get("last_observed_at")) or
+                         timestamp(j.get("source_observed_at")) and
+                         timestamp(j["source_observed_at"]) >= timestamp(retained["last_observed_at"])))
+            row = dict(retained)
+            observed_fields = ({"policy_name": j.get("policy_name") or j.get("name") or None,
+                "workflow_name": j.get("workflow_name") or None, "start_time": j.get("start_time"),
+                "end_time": j.get("end_time"), "source_state": j.get("state_raw") or j.get("state"),
+                "source_completion_status": j.get("completion_status"),
+                "last_observed_at": j.get("source_observed_at"),
+                **{k: j.get(k) for k in ("hostname", "hostnames", "hostname_status", "hostname_sources")}} if j else {})
+            if not row:
+                row.update(observed_fields)
+            conflict = bool(j and retained.get("start_time") and
+                            timestamp(j.get("start_time")) != timestamp(retained["start_time"]))
+            start, end = timestamp((j or {}).get("start_time")), timestamp((j or {}).get("end_time"))
+            invalid_times = bool(start and start > now or end and end > now or start and end and end < start)
+            if conflict or invalid_times or j and j.get("relationship_issues"):
+                row.update(execution_status="unconfirmed", is_running=False,
+                           state_reason="invalid_execution_times" if invalid_times else "job_identity_or_terminal_conflict")
+                unfinished[identity] = retained.get("start_time") or j.get("start_time")
+            elif retained.get("execution_status") == "completed" and (not terminal or not newer):
+                unfinished.pop(identity, None)  # A stale active observation cannot reopen a terminal execution.
+            elif j and (terminal or newer):
+                row.update(observed_fields)
+                confirmed = identity in observed
+                active = not terminal and (state in ACTIVE or completion in ACTIVE) and confirmed
+                row.update(execution_status="completed" if terminal else "running" if active else "unconfirmed",
+                           is_running=active, state_reason=None if terminal or active else "completion_not_confirmed")
+                if terminal:
+                    unfinished.pop(identity, None)
+                else:
+                    unfinished[identity] = j.get("start_time")
+            elif retained.get("execution_status") != "completed":
+                row.update(execution_status="unconfirmed", is_running=False, state_reason="completion_not_confirmed")
+            row.update(document_kind="workflow_execution", source_networker=source, workflow_job_id=identity,
+                       updated_at=now.isoformat(), last_attempt_at=now.isoformat())
+            if row.get("execution_status") == "running":
+                running_count += 1
+            if row.get("execution_status") == "unconfirmed":
+                unknown_count += 1
+            actions.append(self.versioned(source, fixed_id, row, old))
+        # Mark availability BEFORE writing execution rows. On partial bulk/crash,
+        # callers can see unavailable status instead of interpreting a false zero.
+        status = {"document_kind": "running_status", "source_networker": source,
+                  "updated_at": now.isoformat(), "last_attempt_at": now.isoformat(),
+                  "data_status": "updating", "running_count": None,
+                  "unconfirmed_workflow_count": None,
+                  "unfinished_workflows": ((previous or {}).get("_source", {}).get("unfinished_workflows", {}) | unfinished)}
+        status["generation"] = digest([source, now.isoformat(), [a["_source"] for a in actions], unfinished])[:24]
+        await self.send([self.versioned(source, ledger_id, status, previous)])
+        version = await self.current_document(source, ledger_id)
+        if not version or version["_source"].get("generation") != status["generation"]:
+            raise CurrentReadError("running_publication_superseded")
+        if actions:
+            await self.send(actions)
+        success = (observation or {}).get("active_success") is True
+        status.update(data_status="complete" if success and not unknown_count else "partial" if success else "unavailable",
+                      running_count=running_count if success else None,
+                      unconfirmed_workflow_count=unknown_count,
+                      unfinished_workflows=unfinished,
+                      collection_observed_at=now.isoformat() if success else (previous or {}).get("_source", {}).get("collection_observed_at"))
+        await self.send([self.versioned(source, ledger_id, status, version)])
+        return {"tracked_workflows": len(requested), "confirmed_running": running_count,
+                "unconfirmed_workflows": unknown_count, "active_query_success": success}
+
     async def preserve_summary(self, source, day, summary):
         """Create an immutable generation summary in the SAME current index."""
         generation = summary.get("generation")
@@ -334,12 +447,12 @@ class NetworkerDailyCurrent:
                 if observed and all(not timestamp(c.get("observed_at")) or timestamp(c["observed_at"]) < observed for c in terminal):
                     raise CurrentReadError("older_source_observation")
 
-    async def publish(self, source, incoming, now, collection_complete):
+    async def publish(self, source, incoming, now, collection_complete, *, observation=None):
         started = time.perf_counter()
         progress = {"stage": "initialize"}
         status, error_type = "completed", None
         try:
-            await self._publish(source, incoming, now, collection_complete, progress)
+            await self._publish(source, incoming, now, collection_complete, progress, observation)
         except asyncio.CancelledError:
             status = "cancelled"
             raise
@@ -351,7 +464,7 @@ class NetworkerDailyCurrent:
                        "NetWorker current source=%s stage=total status=%s last_stage=%s elapsed_seconds=%.3f error_type=%s",
                        source, status, progress["stage"], time.perf_counter() - started, error_type)
 
-    async def _publish(self, source, incoming, now, collection_complete, progress):
+    async def _publish(self, source, incoming, now, collection_complete, progress, observation):
         if source not in {"core", "chnl", "info"}:
             raise ValueError("invalid current source")
         async with _current_stage(source, "existing_heads", progress) as counts:
@@ -382,8 +495,16 @@ class NetworkerDailyCurrent:
                     and h["_source"]["payload"].get("job_id") is not None}))
                 reasons = [] if collection_complete else ["latest_jobs_collection_partial"]
                 computed = await _compute_daily(hits, source, days, now, self.config, reasons)
+            async with _current_stage(source, "running", progress) as counts:
+                counts.update(await self.publish_running(source, hits, incoming, now, observation))
         except Exception as exc:
             # Preserve every previous result/generation; publish only availability metadata.
+            old_running = await self.current_document(source, f"running:{source}")
+            if old_running and (not timestamp(old_running["_source"].get("last_attempt_at"))
+                                or timestamp(old_running["_source"]["last_attempt_at"]) <= now):
+                unavailable = dict(old_running["_source"], data_status="unavailable", running_count=None,
+                                   last_attempt_at=now.isoformat())
+                await self.send([self.versioned(source, f"running:{source}", unavailable, old_running)])
             for day in days:
                 old = previous[day]
                 reason = str(exc) if isinstance(exc, CurrentReadError) else "current_input_read_failed"
@@ -399,6 +520,12 @@ class NetworkerDailyCurrent:
                                   "window_start": start.isoformat(), "window_end": end.isoformat(), "generation": None,
                                   "success_count": None, "failure_count": None, "success_rate": None}}
                 await self.send([action])
+                old_projection = await self.current_document(source, f"policy-host:{source}:{day}")
+                if old_projection and (not timestamp(old_projection["_source"].get("updated_at"))
+                                       or timestamp(old_projection["_source"]["updated_at"]) <= now):
+                    projection = dict(old_projection["_source"], projection_status="unavailable",
+                                      updated_at=now.isoformat(), failed_policy_host_keys=[])
+                    await self.send([self.versioned(source, f"policy-host:{source}:{day}", projection, old_projection)])
             raise
         async with _current_stage(source, "publish", progress) as counts:
             counts.update(target_days=len(computed), published_days=0)
@@ -416,11 +543,24 @@ class NetworkerDailyCurrent:
                 if actions:
                     await self.send(actions)  # Only switch the summary after all details are visible.
                 await self.preserve_summary(source, day, summary)
+                projection_id = f"policy-host:{source}:{day}"
+                old_projection = await self.current_document(source, projection_id)
+                projection = await _compute_cpu(partial(daily_failure_view, summary, rows))
+                # Hide the old failure set before changing the head. A crash/CAS
+                # failure leaves explicit unavailability, never an unposted generation.
+                await self.send([self.versioned(source, projection_id,
+                    dict(projection, projection_status="updating", failed_policy_host_keys=[]), old_projection)])
+                projection_version = await self.current_document(source, projection_id)
+                if not projection_version or projection_version["_source"].get("generation") != summary["generation"]:
+                    raise CurrentReadError("daily_projection_superseded")
                 action = {"_op_type": "index" if old else "create", "_index": index, "_id": f"daily:{source}:{day}",
                           "_source": dict(summary, summary_role="head")}
                 if old:
                     action.update(if_seq_no=old["_seq_no"], if_primary_term=old["_primary_term"])
                 await self.send([action])
+                if not collection_complete:
+                    projection.update(projection_status="unavailable", failed_policy_host_keys=[])
+                await self.send([self.versioned(source, projection_id, projection, projection_version)])
                 counts["published_days"] += 1
 
     async def send(self, actions):

@@ -97,10 +97,31 @@ class ElasticsearchWriter:
             async with self._current_locks[source]:
                 try:
                     publisher = NetworkerDailyCurrent(self.client, self._async_bulk, self.config.networker_current)
-                    await publisher.publish(source, incoming, datetime.now(timezone.utc), healthy)
+                    observation = batch[-1].payload.get("jobs_collection")
+                    await publisher.publish(source, incoming, datetime.now(timezone.utc), healthy,
+                                            observation=observation)
                 except Exception:
                     LOGGER.exception("NetWorker daily current failed source=%s; previous generation retained", source)
                     ELASTICSEARCH_WRITE_TOTAL.labels("error").inc()
+
+    async def restore_networker_workflows(self, collector, collection_class):
+        """Seed bounded API completion checks from the existing current ledger after restart."""
+        if (not self.client or not self.config.networker_current.enabled or collector.target_type != "Networker"
+                or collection_class not in {"jobs", "fast"}):
+            return
+        source = collector.config.source_networker
+        if source not in self._current_locks:
+            return
+        from elasticsearch import NotFoundError
+        from apps.writers.networker_current import response_body
+
+        try:
+            doc = response_body(await self.client.get(index=f"nw-current-{source}", id=f"running:{source}"))["_source"]
+        except NotFoundError:
+            return
+        if doc.get("source_networker") != source or doc.get("document_kind") != "running_status":
+            raise ValueError("running_ledger_identity_conflict")
+        collector.client.remember_workflows(doc.get("unfinished_workflows", {}))
 
     async def close(self) -> None:
         if self.client:
