@@ -159,18 +159,18 @@ def classify(job: dict, proof: dict, children: list[dict], source: str) -> tuple
     start = timestamp(job.get("start_time"))
     actions = {}
     for c in children:
-        cs, ce = timestamp(c.get("start_time")), timestamp(c.get("end_time"))
         if c.get("source_networker") != source or str(c.get("root_parent_job_id")) != str(job["job_id"]):
             continue
         if c.get("type", "").lower() == "backup action job" and str(c.get("parent_job_id")) == str(job["job_id"]):
+            cs, ce = timestamp(c.get("start_time")), timestamp(c.get("end_time"))
             if start and cs and cs >= start and (not end or ce and cs <= ce <= end):
                 actions[str(c.get("job_id"))] = c
     performed = False
     for c in children:
         parent = actions.get(str(c.get("parent_job_id")))
-        cs, ce = timestamp(c.get("start_time")), timestamp(c.get("end_time"))
         if (parent and c.get("source_networker") == source and c.get("type", "").lower() == "save job"
                 and str(c.get("root_parent_job_id")) == str(job["job_id"])):
+            cs, ce = timestamp(c.get("start_time")), timestamp(c.get("end_time"))
             ps, pe = timestamp(parent.get("start_time")), timestamp(parent.get("end_time"))
             if cs and ps and cs >= ps and (not end or ce and cs <= ce <= end) and (not pe or ce and ce <= pe):
                 performed = True
@@ -222,16 +222,32 @@ def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
                 config: NetworkerCurrentConfig, *, input_reasons: list[str] | None = None) -> dict[str, tuple[dict, list[dict]]]:
     groups = defaultdict(list)
     children = []
+    by_root, by_parent = defaultdict(list), defaultdict(list)
     for hit in hits:
         d = hit.get("_source", {})
         p = d.get("payload", {})
         if d.get("source_networker") == source and isinstance(p, dict):
+            position = len(children)
             children.append(p | {"source_networker": source})
+            by_root[(source, str(p.get("root_parent_job_id")))].append(position)
+            by_parent[(source, str(p.get("parent_job_id")))].append(position)
     latest = max(days)
     for job, conflicts in select_runs(hits, source):
         proof, rule_issues = operating_evidence(job, source, config)
         start, end = timestamp(job.get("start_time")), timestamp(job.get("end_time"))
-        result, detail, kind, reasons = classify(job, proof, children, source)
+        key = (source, str(job["job_id"]))
+        positions = set(by_root.get(key, ())) | set(by_parent.get(key, ()))
+        # Retain parent-only children as candidates without inventing a valid root.
+        # Include direct Action children too; classify keeps all original checks.
+        for position in tuple(positions):
+            child = children[position]
+            kind = child.get("type")
+            if isinstance(kind, str) and kind.lower() == "backup action job":
+                positions.update(by_parent.get((source, str(child.get("job_id"))), ()))
+        # Positions preserve input order and distinct copies. Only duplicate index
+        # references to the SAME input item are removed, never Job observations.
+        candidates = [children[position] for position in sorted(positions)]
+        result, detail, kind, reasons = classify(job, proof, candidates, source)
         reasons = conflicts + rule_issues + reasons
         if conflicts or rule_issues:
             result = "unconfirmed"

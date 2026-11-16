@@ -1,9 +1,14 @@
 """Read complete ES snapshots and publish daily current through the existing writer."""
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import datetime
+from functools import partial
+import logging
 import re
+import time
 
 from elasticsearch import ConflictError, NotFoundError
 from elasticsearch.helpers import BulkIndexError
@@ -13,6 +18,53 @@ from apps.parsers.networker_rest_parser import parse_networker_rest_payload
 from apps.processors.networker_current import RESULTS, build_daily, closed_days, discovered_days, digest, timestamp, window
 
 FIELDS = ["source_networker", "document_type", "payload.type", "payload.end_time", "payload.parent_job_id", "payload.root_parent_job_id"]
+LOGGER = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _current_stage(source, name, progress):
+    """One summary per phase; never log document contents or exception messages."""
+    progress["stage"] = name
+    counts, status, error_type = {}, "completed", None
+    started = time.perf_counter()
+    try:
+        yield counts
+    except asyncio.CancelledError:
+        status = "cancelled"
+        raise
+    except Exception as exc:
+        status, error_type = "failed", type(exc).__name__
+        raise
+    finally:
+        LOGGER.log(logging.INFO if status == "completed" else logging.WARNING,
+                   "NetWorker current source=%s stage=%s status=%s elapsed_seconds=%.3f counts=%s error_type=%s",
+                   source, name, status, time.perf_counter() - started, counts, error_type)
+
+
+async def _compute_daily(hits, source, days, now, config, reasons):
+    # Existing Writer source locks bound this to one computation per source.
+    # Keep this await inside that lock, including cancellation/shutdown cleanup.
+    worker = asyncio.get_running_loop().run_in_executor(None, partial(
+        build_daily, hits, source, days, now, config, input_reasons=reasons))
+    try:
+        result = await asyncio.shield(worker)
+        # Deliver pending caller cancellation before the first publication.
+        await asyncio.sleep(0)
+        return result
+    except asyncio.CancelledError:
+        # Cancelling an await does not stop a running Python thread. Drain it
+        # before propagating cancellation and releasing the caller's source lock.
+        # Repeated cancellation must not interrupt this cleanup either.
+        while not worker.done():
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        if not worker.cancelled():
+            worker.exception()  # Consume a discarded failure; never publish its result.
+        raise
 
 
 def job_indices(source, include_unmapped=True):
@@ -39,6 +91,7 @@ class CurrentSnapshot:
         self.indices = job_indices(source, config.include_unmapped)
         self.pit = None
         self.count = 0
+        self.pages = 0
 
     async def __aenter__(self):
         caps = response_body(await self.client.field_caps(index=self.indices, fields=FIELDS, include_unmapped=True))
@@ -71,6 +124,7 @@ class CurrentSnapshot:
             if after is not None:
                 args["search_after"] = after
             response = response_body(await self.client.search(**args))
+            self.pages += 1  # Includes terminal empty responses, not extra queries.
             self.pit = response.get("pit_id", self.pit)
             if response.get("timed_out") or response.get("terminated_early") or response.get("_shards", {}).get("failed", 0):
                 raise CurrentReadError("partial_search")
@@ -105,24 +159,34 @@ def source_filter(source):
     return [{"term": {"source_networker": source}}, {"term": {"document_type": "job-run"}}]
 
 
-async def read_jobs(client, config, source, days, incoming):
+async def read_jobs(client, config, source, days, incoming, *, stats=None):
+    """Read unchanged queries; optional counters include duplicate hits and rescans."""
     earliest = window(min(days))[0].isoformat()
     query = {"bool": {"filter": source_filter(source) + [{"term": {"payload.type": "workflow job"}}],
                       "should": [{"range": {"payload.end_time": {"gte": earliest}}},
                                  {"bool": {"must_not": [{"exists": {"field": "payload.end_time"}}]}}],
                       "minimum_should_match": 1}}
     async with CurrentSnapshot(client, config, source) as snapshot:
-        workflows = await snapshot.read(query)
-        ids = sorted({str(h["_source"]["payload"]["job_id"]) for h in workflows + incoming
-                      if h["_source"].get("source_networker") == source
-                      and h["_source"]["payload"].get("type", "").lower() == "workflow job"})
-        children = []
-        for offset in range(0, len(ids), 200):
-            chunk = ids[offset:offset + 200]
-            # No child completion window: an earlier-finishing child remains evidence.
-            children.extend(await snapshot.read({"bool": {"filter": source_filter(source),
-                "should": [{"terms": {"payload.root_parent_job_id": chunk}},
-                           {"terms": {"payload.parent_job_id": chunk}}], "minimum_should_match": 1}}))
+        reading_workflows, workflow_hits = True, 0
+        try:
+            workflows = await snapshot.read(query)
+            reading_workflows, workflow_hits = False, len(workflows)
+            ids = sorted({str(h["_source"]["payload"]["job_id"]) for h in workflows + incoming
+                          if h["_source"].get("source_networker") == source
+                          and h["_source"]["payload"].get("type", "").lower() == "workflow job"})
+            children = []
+            for offset in range(0, len(ids), 200):
+                chunk = ids[offset:offset + 200]
+                # No child completion window: an earlier-finishing child remains evidence.
+                children.extend(await snapshot.read({"bool": {"filter": source_filter(source),
+                    "should": [{"terms": {"payload.root_parent_job_id": chunk}},
+                               {"terms": {"payload.parent_job_id": chunk}}], "minimum_should_match": 1}}))
+        finally:
+            if stats is not None:
+                workflow_hits = snapshot.count if reading_workflows else workflow_hits
+                for name, count in (("workflow_hits", workflow_hits), ("child_hits", snapshot.count - workflow_hits),
+                                    ("page_responses", snapshot.pages), ("snapshot_reads", 1)):
+                    stats[name] = stats.get(name, 0) + count
     hits = {(h["_index"], h["_id"]): h for h in workflows + children}
     # Realtime inputs supplement an ES refresh delay; terminal copies are never regressed.
     for h in incoming:
@@ -140,10 +204,14 @@ async def read_jobs(client, config, source, days, incoming):
         d = h["_source"]
         if d.get("source_networker") != source or d["payload"].get("source_networker", source) != source:
             raise CurrentReadError("source_identity_conflict")
+    if stats is not None:
+        stats["merged_hits"] = len(hits)
     return list(hits.values())
 
 
-async def hydrate_messages(client, hits, source):
+async def hydrate_messages(client, hits, source, *, stats=None):
+    if stats is not None:
+        stats.update(requested_raw_documents=0, returned_raw_documents=0, processed_jobs=0, enriched_workflows=0)
     groups = defaultdict(set)
     pending = []
     for h in hits:
@@ -159,6 +227,8 @@ async def hydrate_messages(client, hits, source):
     raw_jobs = {}
     for index, ids in groups.items():
         ordered = sorted(ids)
+        if stats is not None:
+            stats["requested_raw_documents"] += len(ordered)
         for offset in range(0, len(ordered), 100):
             try:
                 response = response_body(await client.mget(index=index, ids=ordered[offset:offset + 100],
@@ -166,6 +236,8 @@ async def hydrate_messages(client, hits, source):
             except NotFoundError:
                 continue  # RAW retention loss does not erase a stored Workflow outcome.
             for hit in response.get("docs", []):
+                if stats is not None and hit.get("found") is True:
+                    stats["returned_raw_documents"] += 1
                 d = hit.get("_source", {})
                 payload = d.get("payload", {})
                 if (hit.get("found") is not True or d.get("ok") is not True
@@ -173,6 +245,8 @@ async def hydrate_messages(client, hits, source):
                         or payload.get("collection_status") != "success"):
                     continue
                 parsed = parse_networker_rest_payload(payload.get("raw", {}), d.get("collector", ""), source_networker=source)
+                if stats is not None:
+                    stats["processed_jobs"] += len(parsed["jobs"])
                 raw_jobs[(index, hit["_id"])] = {str(j["job_id"]): j for j in parsed["jobs"]}
     for hit, index, raw_id in pending:
         p = hit["_source"]["payload"]
@@ -182,6 +256,8 @@ async def hydrate_messages(client, hits, source):
                 and j.get("completion_status") == p.get("completion_status")):
             # In-memory enrichment only; original Job Run/RAW documents are untouched.
             p["message"] = j.get("message", "")
+            if stats is not None and p["message"]:
+                stats["enriched_workflows"] += 1
 
 
 class NetworkerDailyCurrent:
@@ -259,24 +335,53 @@ class NetworkerDailyCurrent:
                     raise CurrentReadError("older_source_observation")
 
     async def publish(self, source, incoming, now, collection_complete):
+        started = time.perf_counter()
+        progress = {"stage": "initialize"}
+        status, error_type = "completed", None
+        try:
+            await self._publish(source, incoming, now, collection_complete, progress)
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
+        except Exception as exc:
+            status, error_type = "failed", type(exc).__name__
+            raise
+        finally:
+            LOGGER.log(logging.INFO if status == "completed" else logging.WARNING,
+                       "NetWorker current source=%s stage=total status=%s last_stage=%s elapsed_seconds=%.3f error_type=%s",
+                       source, status, progress["stage"], time.perf_counter() - started, error_type)
+
+    async def _publish(self, source, incoming, now, collection_complete, progress):
         if source not in {"core", "chnl", "info"}:
             raise ValueError("invalid current source")
-        days = closed_days(now, source, self.config)
-        # Read publication versions BEFORE the input snapshot, not after computing it.
-        previous = {d: await self.existing(source, d) for d in days}
+        async with _current_stage(source, "existing_heads", progress) as counts:
+            days = closed_days(now, source, self.config)
+            counts["target_days"] = len(days)
+            # Read publication versions BEFORE the input snapshot, not after computing it.
+            previous = {d: await self.existing(source, d) for d in days}
         try:
-            hits = await read_jobs(self.client, self.config, source, days, incoming)
-            extra_days = discovered_days(hits, source, self.config, max(days)) - set(days)
-            if extra_days:
-                # Preserve the existing CAS contract: read all new day versions
-                # BEFORE opening the complete, expanded input snapshot again.
-                previous.update({d: await self.existing(source, d) for d in sorted(extra_days)})
-                days = sorted(set(days) | extra_days)
-                hits = await read_jobs(self.client, self.config, source, days, incoming)
-            await self.check_previous(source, previous, hits)
-            await hydrate_messages(self.client, hits, source)
-            reasons = [] if collection_complete else ["latest_jobs_collection_partial"]
-            computed = build_daily(hits, source, days, now, self.config, input_reasons=reasons)
+            async with _current_stage(source, "job_read", progress) as counts:
+                counts.update(workflow_hits=0, child_hits=0, page_responses=0, snapshot_reads=0)
+                hits = await read_jobs(self.client, self.config, source, days, incoming, stats=counts)
+                extra_days = discovered_days(hits, source, self.config, max(days)) - set(days)
+                if extra_days:
+                    # Preserve the existing CAS contract: read all new day versions
+                    # BEFORE opening the complete, expanded input snapshot again.
+                    previous.update({d: await self.existing(source, d) for d in sorted(extra_days)})
+                    days = sorted(set(days) | extra_days)
+                    hits = await read_jobs(self.client, self.config, source, days, incoming, stats=counts)
+            async with _current_stage(source, "previous_check", progress):
+                await self.check_previous(source, previous, hits)
+            async with _current_stage(source, "raw_enrichment", progress) as counts:
+                await hydrate_messages(self.client, hits, source, stats=counts)
+            async with _current_stage(source, "aggregate", progress) as counts:
+                counts.update(input_hits=len(hits), target_days=len(days), workflow_executions=len({
+                    str(h["_source"]["payload"]["job_id"]) for h in hits
+                    if h["_source"].get("source_networker") == source
+                    and h["_source"]["payload"].get("type", "").lower() == "workflow job"
+                    and h["_source"]["payload"].get("job_id") is not None}))
+                reasons = [] if collection_complete else ["latest_jobs_collection_partial"]
+                computed = await _compute_daily(hits, source, days, now, self.config, reasons)
         except Exception as exc:
             # Preserve every previous result/generation; publish only availability metadata.
             for day in days:
@@ -295,25 +400,28 @@ class NetworkerDailyCurrent:
                                   "success_count": None, "failure_count": None, "success_rate": None}}
                 await self.send([action])
             raise
-        for day, (summary, rows) in computed.items():
-            index = f"nw-current-{source}"
-            old = previous[day]
-            if old:
-                # Upgrade an existing fixed-ID-only head BEFORE it can be replaced.
-                # Existing snapshots are never overwritten by availability updates.
-                await self.preserve_summary(source, day, old["_source"])
-            actions = [{"_op_type": "index", "_index": index,
-                        "_id": f"workflow:{source}:{day}:{digest([r['policy_name'], r['workflow_name'], r['workflow_job_id'] if not r['policy_name'] or not r['workflow_name'] or r['attribution'] == 'unresolved' else None])[:24]}:{summary['generation']}",
-                        "_source": r} for r in rows]
-            summary["detail_ids"] = [a["_id"] for a in actions]
-            if actions:
-                await self.send(actions)  # Only switch the summary after all details are visible.
-            await self.preserve_summary(source, day, summary)
-            action = {"_op_type": "index" if old else "create", "_index": index, "_id": f"daily:{source}:{day}",
-                      "_source": dict(summary, summary_role="head")}
-            if old:
-                action.update(if_seq_no=old["_seq_no"], if_primary_term=old["_primary_term"])
-            await self.send([action])
+        async with _current_stage(source, "publish", progress) as counts:
+            counts.update(target_days=len(computed), published_days=0)
+            for day, (summary, rows) in computed.items():
+                index = f"nw-current-{source}"
+                old = previous[day]
+                if old:
+                    # Upgrade an existing fixed-ID-only head BEFORE it can be replaced.
+                    # Existing snapshots are never overwritten by availability updates.
+                    await self.preserve_summary(source, day, old["_source"])
+                actions = [{"_op_type": "index", "_index": index,
+                            "_id": f"workflow:{source}:{day}:{digest([r['policy_name'], r['workflow_name'], r['workflow_job_id'] if not r['policy_name'] or not r['workflow_name'] or r['attribution'] == 'unresolved' else None])[:24]}:{summary['generation']}",
+                            "_source": r} for r in rows]
+                summary["detail_ids"] = [a["_id"] for a in actions]
+                if actions:
+                    await self.send(actions)  # Only switch the summary after all details are visible.
+                await self.preserve_summary(source, day, summary)
+                action = {"_op_type": "index" if old else "create", "_index": index, "_id": f"daily:{source}:{day}",
+                          "_source": dict(summary, summary_role="head")}
+                if old:
+                    action.update(if_seq_no=old["_seq_no"], if_primary_term=old["_primary_term"])
+                await self.send([action])
+                counts["published_days"] += 1
 
     async def send(self, actions):
         result = await self.bulk(self.client, actions, refresh="wait_for", raise_on_error=True,
