@@ -1,0 +1,11 @@
+{
+  "properties": {
+    "client": {
+      "properties": {
+        "os": {
+          "type": "keyword"
+        }
+      }
+    }
+  }
+}

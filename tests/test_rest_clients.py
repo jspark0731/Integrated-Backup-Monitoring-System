@@ -516,7 +516,9 @@ async def test_networker_debug_log_contains_q_without_fl(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_networker_inventory_requests_clients_policies_and_group_metadata() -> None:
+@pytest.mark.parametrize("field_filter", [True, False])
+@pytest.mark.parametrize("endpoint", [None, "nwrestapi/v3/global/clients?fl=operatingSystem"])
+async def test_networker_inventory_requests_clients_policies_and_group_metadata(field_filter, endpoint) -> None:
     requests = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -538,7 +540,9 @@ async def test_networker_inventory_requests_clients_policies_and_group_metadata(
             password="secret",
             source_networker="core",
             verify_tls=False,
-            networker_field_filter=False,
+            networker_field_filter=field_filter,
+            endpoints=({"clients": endpoint, "policies": "nwrestapi/v3/global/protectionpolicies",
+                        "groups": "nwrestapi/v3/global/protectiongroups"} if endpoint else {}),
         )
     )
     client._rest._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -552,9 +556,9 @@ async def test_networker_inventory_requests_clients_policies_and_group_metadata(
         "/nwrestapi/v3/global/protectiongroups",
     ]
     assert requests[0][1]["fl"] == (
-        "resourceId,hostname,clientState,operatingSystem,backupType,protectionGroups"
+        "resourceId,hostname,clientState,backupType,protectionGroups,os"
     )
-    assert "fl" not in requests[1][1]
+    assert ("fl" in requests[1][1]) is field_filter
     assert set(payloads) == {"clients", "policies", "groups"}
 
 

@@ -46,9 +46,9 @@ FIELD_FILTERS = {
             "resourceId",
             "hostname",
             "clientState",
-            "operatingSystem",
             "backupType",
             "protectionGroups",
+            "os",
         )
     ),
     "policies": "name,comment,resourceId,workflows",

@@ -222,10 +222,19 @@ def test_conflicting_legacy_save_claims_are_not_erased_by_configured_targets():
 
 
 @pytest.mark.asyncio
-async def test_inventory_api_requests_are_list_only_and_roundtrip_existing_writer_raw_snapshot():
+@pytest.mark.parametrize("present,os_value", [
+    (True, "Linux 6.8.0 x86_64"), (True, "  Linux custom release  "),
+    (True, "Windows Server 2022 Datacenter 10.0"), (True, "AIX 7.2"),
+    (True, ""), (True, None), (False, None),
+])
+async def test_inventory_api_requests_are_list_only_and_roundtrip_existing_writer_raw_snapshot(present, os_value):
     raw, requests = raw_inventory(), []
+    if present:
+        raw["clients"]["clients"][0]["os"] = os_value
     async def handler(request):
         requests.append(request)
+        if "operatingSystem" in request.url.params.get("fl", "").split(","):
+            return httpx.Response(400, json={"message": "Invalid field: operatingSystem"})
         key = {"clients": "clients", "protectionpolicies": "policies", "protectiongroups": "groups"}[request.url.path.rsplit("/",1)[-1]]
         return httpx.Response(200, json=raw[key])
     collector = NetworkerRestCollector(client_config(schedule=CollectionSchedulesConfig(
@@ -237,8 +246,29 @@ async def test_inventory_api_requests_are_list_only_and_roundtrip_existing_write
         await collector.close()
     assert collected.ok and collected.payload["inventory_status"]["complete"] is True
     assert len(requests) == 3 and all(r.method == "GET" for r in requests)
-    assert "protectionGroups" in requests[0].url.params["fl"]
+    assert requests[0].url.params["fl"] == "resourceId,hostname,clientState,backupType,protectionGroups,os"
+    assert "type" not in requests[0].url.params  # No evidence that advanced is mandatory for os.
     assert collected.payload["clients"][0]["protection_groups"] == ["GROUP"]
+    actions = ElasticsearchWriter(ElasticsearchConfig())._actions_for_result(collected)
+    document = next(a["_source"] for a in actions if a["_source"].get("document_type") == "client")
+    expected = os_value if isinstance(os_value, str) else ""
+    assert document["client"]["os"] == document["payload"]["client_os"] == expected
+    assert document["payload"]["protection_groups"] == ["GROUP"]
+    stored_raw = next(a["_source"] for a in actions if a["_index"].startswith("nw-ops-raw-"))
+    assert stored_raw["payload"]["raw"]["clients"]["clients"] == raw["clients"]["clients"]
+
+
+def test_client_os_preserves_api_string_and_wins_over_legacy_operating_system_alias():
+    raw = raw_inventory()
+    raw["clients"]["clients"][0].update(os="  AIX 7.2 custom  ", operatingSystem="Windows legacy")
+    parsed = parse_networker_rest_payload(raw, "networker_core", source_networker="core")
+    assert parsed["clients"][0]["client_os"] == "  AIX 7.2 custom  "
+    assert parsed["inventory_status"]["complete"] is True
+
+
+def test_client_os_mapping_fragment_reuses_existing_field_without_new_index_contract():
+    value = json.loads(Path("config/elasticsearch_networker_client_os_mapping.example.json").read_text())
+    assert value == {"properties": {"client": {"properties": {"os": {"type": "keyword"}}}}}
 
 
 @pytest.mark.asyncio

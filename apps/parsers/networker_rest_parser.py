@@ -161,12 +161,11 @@ def _protection_group(command: Any) -> str:
 
 def _normalize_client(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:
     hostname = _string(item.get("hostname")) or _string(item.get("name"))
-    os_name = _first_string(
-        item.get("operatingSystem"),
-        item.get("os"),
-        item.get("clientOS"),
-        item.get("platform"),
-    )
+    # Preserve the API os string verbatim, including whitespace and empty values.
+    # Keep legacy response compatibility without requesting obsolete field names.
+    os_name = item.get("os")
+    if not isinstance(os_name, str):
+        os_name = _first_string(item.get("operatingSystem"), item.get("clientOS"), item.get("platform"))
 
     return {
         "server": server,
