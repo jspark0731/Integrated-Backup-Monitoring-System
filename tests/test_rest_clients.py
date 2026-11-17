@@ -516,13 +516,15 @@ async def test_networker_debug_log_contains_q_without_fl(caplog) -> None:
 
 
 @pytest.mark.asyncio
-async def test_networker_inventory_only_requests_clients_and_policies() -> None:
+async def test_networker_inventory_requests_clients_policies_and_group_metadata() -> None:
     requests = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append((request.url.path, dict(request.url.params)))
         if request.url.path.endswith("/clients"):
             return httpx.Response(200, json={"clients": []})
+        if request.url.path.endswith("/protectiongroups"):
+            return httpx.Response(200, json={"protectionGroups": []})
         return httpx.Response(200, json={"protectionPolicies": []})
 
     client = NetworkerRestClient(
@@ -547,12 +549,13 @@ async def test_networker_inventory_only_requests_clients_and_policies() -> None:
     assert [path for path, _ in requests] == [
         "/nwrestapi/v3/global/clients",
         "/nwrestapi/v3/global/protectionpolicies",
+        "/nwrestapi/v3/global/protectiongroups",
     ]
     assert requests[0][1]["fl"] == (
-        "resourceId,hostname,clientState,operatingSystem,backupType"
+        "resourceId,hostname,clientState,operatingSystem,backupType,protectionGroups"
     )
     assert "fl" not in requests[1][1]
-    assert set(payloads) == {"clients", "policies"}
+    assert set(payloads) == {"clients", "policies", "groups"}
 
 
 async def _get_json(client: httpx.AsyncClient, endpoint: str) -> dict:

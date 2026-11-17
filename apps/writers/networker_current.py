@@ -15,7 +15,7 @@ from elasticsearch.helpers import BulkIndexError
 
 from apps.core.config import NetworkerCurrentConfig
 from apps.parsers.networker_rest_parser import parse_networker_rest_payload
-from apps.processors.networker_current import (ACTIVE, RESULTS, build_daily, closed_days, daily_failure_view,
+from apps.processors.networker_current import (ACTIVE, RESULTS, InventoryTargets, build_daily, closed_days, daily_failure_view,
     discovered_days, digest, running_candidates, timestamp, window)
 
 FIELDS = ["source_networker", "document_type", "payload.type", "payload.end_time", "payload.parent_job_id", "payload.root_parent_job_id"]
@@ -42,8 +42,8 @@ async def _current_stage(source, name, progress):
                    source, name, status, time.perf_counter() - started, counts, error_type)
 
 
-async def _compute_daily(hits, source, days, now, config, reasons):
-    return await _compute_cpu(partial(build_daily, hits, source, days, now, config, input_reasons=reasons))
+async def _compute_daily(hits, source, days, now, config, reasons, inventory=None):
+    return await _compute_cpu(partial(build_daily, hits, source, days, now, config, input_reasons=reasons, inventory=inventory))
 
 
 async def _compute_cpu(function):
@@ -213,6 +213,87 @@ async def read_jobs(client, config, source, days, incoming, *, stats=None):
     return list(hits.values())
 
 
+async def read_inventory(client, config, source, now, *, stats=None):
+    """Read existing RAW Inventory snapshots, newest first. Never query disabled payload fields.
+
+    Stop after the latest successful complete Inventory and equal-time copies. A failed
+    attempt is retained as availability evidence, while the last good input survives.
+    """
+    index = f"nw-ops-raw-{source}-*"
+    documents, seen, after, pit, reason, boundary = [], set(), None, None, None, None
+    try:
+        caps = response_body(await client.field_caps(index=index, fields=["@timestamp", "collection_class"], include_unmapped=True))
+        for name in ("@timestamp", "collection_class"):
+            values = caps.get("fields", {}).get(name, {})
+            if not values or any(v.get("searchable") is not True for v in values.values()):
+                raise CurrentReadError("inventory_metadata_not_searchable")
+        opened = response_body(await client.open_point_in_time(index=index, keep_alive="2m", allow_partial_search_results=False))
+        pit = opened.get("id")
+        if not pit or opened.get("_shards", {}).get("failed", 0):
+            raise CurrentReadError("inventory_partial_pit")
+        while True:
+            args = dict(pit={"id": pit, "keep_alive": "2m"},
+                query={"bool": {"filter": [{"terms": {"collection_class": ["inventory", "slow"]}},
+                                            {"range": {"@timestamp": {"lte": now.isoformat()}}}]}},
+                sort=[{"@timestamp": "desc"}, "_shard_doc"], size=min(config.page_size, 8),
+                track_total_hits=False, allow_partial_search_results=False,
+                source_includes=["@timestamp", "ok", "collection_class", "payload.summary.source_networker",
+                    "payload.collection_status", "payload.endpoint_errors", "payload.inventory_status",
+                    "payload.clients", "payload.workflows", "payload.protection_groups"])
+            if after is not None:
+                args["search_after"] = after
+            response = response_body(await client.search(**args))
+            pit = response.get("pit_id", pit)
+            if stats is not None:
+                stats["pages"] = stats.get("pages", 0) + 1
+            if response.get("timed_out") or response.get("terminated_early") or response.get("_shards", {}).get("failed", 0):
+                raise CurrentReadError("inventory_partial_search")
+            page = response.get("hits", {}).get("hits")
+            if not isinstance(page, list):
+                raise CurrentReadError("inventory_invalid_hits")
+            if not page:
+                break
+            finished = False
+            for hit in page:
+                key, cursor, d = (hit.get("_index"), hit.get("_id")), hit.get("sort"), hit.get("_source")
+                if (key in seen or not re.fullmatch(r"nw-ops-raw-" + source + r"-\d{4}-\d{2}", str(key[0]))
+                        or not isinstance(d, dict) or not isinstance(cursor, list) or len(cursor) != 2
+                        or after is not None and (cursor[0] > after[0] or cursor[0] == after[0] and cursor[1] <= after[1])):
+                    raise CurrentReadError("inventory_invalid_cursor_or_hit")
+                seen.add(key)
+                after = cursor
+                if len(seen) > config.max_hits:
+                    raise CurrentReadError("inventory_read_budget_exhausted")
+                observed = timestamp(d.get("@timestamp"))
+                p = d.get("payload", {})
+                if boundary and observed and observed < boundary:
+                    finished = True
+                    break
+                if not observed or observed > now or p.get("summary", {}).get("source_networker") != source:
+                    raise CurrentReadError("inventory_source_or_time_conflict")
+                documents.append(hit)
+                if InventoryTargets.complete_document(d, source, now):
+                    if boundary is None:
+                        boundary = observed
+            # Read THROUGH the selected timestamp, including ties across pages.
+            if finished:
+                break
+    except Exception as exc:
+        documents = []  # A broken snapshot cannot publish partially read relationships.
+        reason = str(exc) if isinstance(exc, CurrentReadError) else "inventory_read_unavailable"
+    finally:
+        if pit:
+            try:
+                closed = response_body(await client.close_point_in_time(id=pit))
+                if closed.get("succeeded") is not True:
+                    raise CurrentReadError("inventory_pit_close_failed")
+            except Exception:
+                documents, reason = [], "inventory_pit_close_failed"
+        if stats is not None:
+            stats.update(snapshot_hits=len(documents), read_status="unavailable" if reason else "complete")
+    return await _compute_cpu(partial(InventoryTargets, documents, source, now, reason))
+
+
 async def hydrate_messages(client, hits, source, *, stats=None):
     if stats is not None:
         stats.update(requested_raw_documents=0, returned_raw_documents=0, processed_jobs=0, enriched_workflows=0)
@@ -290,12 +371,12 @@ class NetworkerDailyCurrent:
             action.update(if_seq_no=old["_seq_no"], if_primary_term=old["_primary_term"])
         return action
 
-    async def publish_running(self, source, hits, incoming, now, observation):
+    async def publish_running(self, source, hits, incoming, now, observation, inventory=None):
         """Fixed execution IDs plus a small unfinished ledger; no historical ES scan."""
         ledger_id = f"running:{source}"
         previous = await self.current_document(source, ledger_id)
         unfinished = dict(previous["_source"].get("unfinished_workflows", {})) if previous else {}
-        jobs = await _compute_cpu(partial(running_candidates, hits, source))
+        jobs = await _compute_cpu(partial(running_candidates, hits, source, inventory))
         requested = set(unfinished)
         requested.update(str(h["_source"]["payload"].get("job_id")) for h in incoming
                          if h["_source"].get("source_networker") == source
@@ -327,7 +408,11 @@ class NetworkerDailyCurrent:
                 "end_time": j.get("end_time"), "source_state": j.get("state_raw") or j.get("state"),
                 "source_completion_status": j.get("completion_status"),
                 "last_observed_at": j.get("source_observed_at"),
-                **{k: j.get(k) for k in ("hostname", "hostnames", "hostname_status", "hostname_sources")}} if j else {})
+                **{k: j.get(k) for k in ("hostname", "hostnames", "hostname_status", "hostname_sources",
+                    "configured_hostnames", "observed_hostnames", "hostname_relation_status", "inventory_observed_at",
+                    "inventory_last_attempt_at", "inventory_temporal_basis", "inventory_status", "inventory_reasons",
+                    "inventory_id", "inventory_last_collection_status",
+                    "observed_hostname_conflict")}} if j else {})
             if not row:
                 row.update(observed_fields)
             conflict = bool(j and retained.get("start_time") and
@@ -487,6 +572,8 @@ class NetworkerDailyCurrent:
                 await self.check_previous(source, previous, hits)
             async with _current_stage(source, "raw_enrichment", progress) as counts:
                 await hydrate_messages(self.client, hits, source, stats=counts)
+            async with _current_stage(source, "inventory_read", progress) as counts:
+                inventory = await read_inventory(self.client, self.config, source, now, stats=counts)
             async with _current_stage(source, "aggregate", progress) as counts:
                 counts.update(input_hits=len(hits), target_days=len(days), workflow_executions=len({
                     str(h["_source"]["payload"]["job_id"]) for h in hits
@@ -494,9 +581,9 @@ class NetworkerDailyCurrent:
                     and h["_source"]["payload"].get("type", "").lower() == "workflow job"
                     and h["_source"]["payload"].get("job_id") is not None}))
                 reasons = [] if collection_complete else ["latest_jobs_collection_partial"]
-                computed = await _compute_daily(hits, source, days, now, self.config, reasons)
+                computed = await _compute_daily(hits, source, days, now, self.config, reasons, inventory)
             async with _current_stage(source, "running", progress) as counts:
-                counts.update(await self.publish_running(source, hits, incoming, now, observation))
+                counts.update(await self.publish_running(source, hits, incoming, now, observation, inventory))
         except Exception as exc:
             # Preserve every previous result/generation; publish only availability metadata.
             old_running = await self.current_document(source, f"running:{source}")

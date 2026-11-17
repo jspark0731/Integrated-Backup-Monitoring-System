@@ -749,7 +749,7 @@ async def test_reusable_start_day_rule_discovers_and_rebuilds_complete_older_day
     await NetworkerDailyCurrent(es, es.bulk, cfg).publish("core", [], now, True)
     summary = es.store[("nw-current-core", "daily:core:" + DAY)]
     assert summary["success_count"] == 1 and summary["failure_count"] == 1
-    assert len([r for r in es.requests if r[0] == "open"]) == 2
+    assert len([r for r in es.requests if r[0] == "open" and "job-run" in r[1]["index"]]) == 2
     assert cfg.run_evidence == {}
 
 

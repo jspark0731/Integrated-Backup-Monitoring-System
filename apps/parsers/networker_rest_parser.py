@@ -19,6 +19,13 @@ def parse_networker_rest_payload(
     jobs = [_normalize_job(item, server_name, source) for item in _items(payloads.get("jobs"), "jobs")]
     clients = [_normalize_client(item, server_name, source) for item in _items(payloads.get("clients"), "clients")]
     policies, workflows = _normalize_policies(payloads.get("policies"), server_name)
+    groups = [{"source_networker": source, "name": item.get("name"), "work_item_type": item.get("workItemType"),
+               "work_item_source": item.get("workItemSource"),
+               "work_item_subtype": item.get("workItemSubType"),
+               "dynamic_association": item.get("dynamicAssociation"),
+               "work_items": item.get("workItems"), "work_item_queries": item.get("workItemQueries"),
+               "work_item_exclusions": item.get("workItemExclusions")}
+              for item in _items(payloads.get("groups"), "protectionGroups")]
     backups = [_normalize_backup(item, server_name, source) for item in _items(payloads.get("backups"), "backups")]
 
     jobs = [_classify_record(item, source) for item in jobs]
@@ -41,6 +48,8 @@ def parse_networker_rest_payload(
         "clients": clients,
         "policies": policies,
         "workflows": workflows,
+        "protection_groups": groups,
+        "inventory_status": _inventory_status(payloads, clients, workflows, groups),
         "monthly_report": [
             _classify_record(item, source)
             for item in _build_monthly_report(server_name, jobs, clients, workflows, backups)
@@ -169,6 +178,7 @@ def _normalize_client(item: dict[str, Any], server: str, source_networker: str) 
         "client_os": os_name,
         "client_os_family": _os_family(os_name),
         "backup_type": _string(item.get("backupType")),
+        "protection_groups": item.get("protectionGroups"),
     }
 
 
@@ -198,13 +208,37 @@ def _normalize_policies(payload: Any, server: str) -> tuple[list[dict[str, Any]]
                     "enabled": workflow.get("enabled"),
                     "action_count": len(actions),
                     "actions": [_string(action.get("name")) for action in actions],
-                    "protection_groups": workflow.get("protectionGroups") or [],
+                    "protection_groups": workflow.get("protectionGroups"),
                     "start_time": workflow.get("startTime"),
                     "end_time": workflow.get("endTime"),
                 }
             )
 
     return policies, workflows
+
+
+def _inventory_status(payloads, clients, workflows, groups):
+    """Transport/list completeness is not historical execution membership proof."""
+    reasons = []
+    for endpoint, key in (("clients", "clients"), ("policies", "protectionPolicies"), ("groups", "protectionGroups")):
+        value = payloads.get(endpoint)
+        records = value.get(key) if isinstance(value, dict) else value
+        if not isinstance(records, list) or any(not isinstance(r, dict) for r in records):
+            reasons.append(endpoint + "_missing_or_invalid")
+        elif isinstance(value, dict) and (type(value.get("count")) is not int or value["count"] > len(records)):
+            reasons.append(endpoint + "_completeness_unconfirmed")
+    for policy in _items(payloads.get("policies"), "protectionPolicies"):
+        if not isinstance(policy.get("workflows"), list) or any(not isinstance(w, dict) for w in policy["workflows"]):
+            reasons.append("workflow_list_missing_or_invalid")
+    def names(value):
+        return isinstance(value, list) and all(isinstance(s, str) and s.strip() for s in value)
+    if any(not c.get("client_name") or not names(c.get("protection_groups")) for c in clients):
+        reasons.append("client_membership_missing_or_invalid")
+    if any(not w.get("policy_name") or not w.get("workflow_name") or not names(w.get("protection_groups")) for w in workflows):
+        reasons.append("workflow_membership_missing_or_invalid")
+    if any(not isinstance(g.get("name"), str) or not g["name"].strip() for g in groups):
+        reasons.append("group_identity_missing_or_invalid")
+    return {"complete": not reasons, "reasons": sorted(set(reasons)), "contract_version": 1}
 
 
 def _normalize_backup(item: dict[str, Any], server: str, source_networker: str) -> dict[str, Any]:

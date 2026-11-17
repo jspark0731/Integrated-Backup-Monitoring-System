@@ -5,7 +5,7 @@
     "nw-current-info"
   ],
   "priority": 450,
-  "version": 4,
+  "version": 5,
   "_meta": {
     "description": "Daily Workflow results, live executions and daily Policy-host failure keys; current-only dashboards"
   },
@@ -222,6 +222,39 @@
         },
         "unidentified_failure_count": {
           "type": "long"
+        },
+        "configured_hostnames": {
+          "type": "keyword"
+        },
+        "observed_hostnames": {
+          "type": "keyword"
+        },
+        "hostname_relation_status": {
+          "type": "keyword"
+        },
+        "inventory_temporal_basis": {
+          "type": "keyword"
+        },
+        "inventory_status": {
+          "type": "keyword"
+        },
+        "inventory_reasons": {
+          "type": "keyword"
+        },
+        "inventory_observed_at": {
+          "type": "date"
+        },
+        "inventory_last_attempt_at": {
+          "type": "date"
+        },
+        "observed_hostname_conflict": {
+          "type": "boolean"
+        },
+        "inventory_id": {
+          "type": "keyword"
+        },
+        "inventory_last_collection_status": {
+          "type": "keyword"
         }
       }
     }

@@ -226,6 +226,7 @@ def hostname_evidence(job: dict, candidates: list[dict], source: str) -> dict:
     fields, never a bare runOnHost value or a Workflow/Action execution host.
     """
     names, origins = set(), set()
+    observed_conflict = False
 
     def target(p, *, saved=False):
         origin = p.get("hostname_source")
@@ -257,6 +258,8 @@ def hostname_evidence(job: dict, candidates: list[dict], source: str) -> dict:
             origins.add(origin)
 
     include(job)
+    if job.get("hostname_source") in ("clientName", "clientHostname"):
+        observed_conflict = target(job)[3]
     start, end = timestamp(job.get("start_time")), timestamp(job.get("end_time"))
     observations = defaultdict(set)
     conflicting = set()
@@ -287,6 +290,10 @@ def hostname_evidence(job: dict, candidates: list[dict], source: str) -> dict:
         parent = parents[0]
         cs, ce = timestamp(c.get("start_time")), timestamp(c.get("end_time"))
         ps, pe = timestamp(parent.get("start_time")), timestamp(parent.get("end_time"))
+        valid_times = bool(cs and ps and cs >= ps and (not end or ce and cs <= ce <= end)
+                           and (not pe or ce and ce <= pe))
+        if valid_times and (str(c.get("job_id")) in conflicting or len(observations[str(c.get("job_id"))]) > 1):
+            observed_conflict = True
         if (str(c.get("job_id")) not in conflicting and len(observations[str(c.get("job_id"))]) <= 1
                 and cs and ps and cs >= ps
                 and (not end or ce and cs <= ce <= end) and (not pe or ce and ce <= pe)):
@@ -294,7 +301,148 @@ def hostname_evidence(job: dict, candidates: list[dict], source: str) -> dict:
     ordered = sorted(n for n in names if n)
     return {"hostname": ordered[0] if len(ordered) == 1 else None, "hostnames": ordered,
             "hostname_status": "identified" if len(ordered) == 1 else "multiple" if ordered else "unidentified",
-            "hostname_sources": sorted(origins)}
+            "hostname_sources": sorted(origins),
+            **({"observed_hostname_conflict": True} if observed_conflict else {})}
+
+
+class InventoryTargets:
+    """Use one latest successful, complete source Inventory for this calculation."""
+
+    @staticmethod
+    def complete_document(document, source, now):
+        payload = document.get("payload")
+        observed = timestamp(document.get("@timestamp"))
+        return bool(observed and observed <= now and isinstance(payload, dict)
+                    and isinstance(payload.get("summary"), dict)
+                    and payload["summary"].get("source_networker") == source
+                    and document.get("ok") is True and payload.get("collection_status") == "success"
+                    and not payload.get("endpoint_errors")
+                    and isinstance(payload.get("inventory_status"), dict)
+                    and payload["inventory_status"].get("complete") is True
+                    and all(isinstance(payload.get(k), list) for k in ("clients", "workflows", "protection_groups")))
+
+    def __init__(self, documents, source, now, read_reason=None):
+        self.relations = {}
+        self.latest_attempt, self.latest_complete = None, None
+        self.inventory_id = None
+        self.latest_collection_status = "unavailable"
+        self.read_reason = read_reason
+        versions = []
+        for hit in documents:
+            d = hit.get("_source", {})
+            p = d.get("payload", {})
+            observed = timestamp(d.get("@timestamp"))
+            if (not observed or observed > now or not isinstance(p, dict)
+                    or not isinstance(p.get("summary"), dict)
+                    or p["summary"].get("source_networker") != source):
+                continue
+            complete = self.complete_document(d, source, now)
+            status = "success" if complete else "error" if d.get("ok") is False or p.get("collection_status") == "error" else "partial"
+            if self.latest_attempt is None or observed > self.latest_attempt:
+                self.latest_attempt, self.latest_collection_status = observed, status
+            elif observed == self.latest_attempt:
+                # Equal-time attempts must not hide a failure behind a successful copy.
+                priority = {"success": 0, "partial": 1, "error": 2}
+                if priority[status] > priority[self.latest_collection_status]:
+                    self.latest_collection_status = status
+            if not complete:
+                continue
+            if self.latest_complete is None or observed > self.latest_complete:
+                self.latest_complete, versions = observed, [hit]
+            elif observed == self.latest_complete:
+                versions.append(hit)
+        if not versions:
+            return
+        fingerprints = {digest({k: h["_source"]["payload"][k] for k in ("clients", "workflows", "protection_groups")}) for h in versions}
+        if len(fingerprints) != 1:
+            self.read_reason = "inventory_snapshot_conflict"
+            return
+        selected = min(versions, key=lambda h: (str(h.get("_index", "")), str(h.get("_id", ""))))
+        self.inventory_id = selected.get("_id")
+        p = selected["_source"]["payload"]
+        members, groups, workflows = defaultdict(set), defaultdict(list), defaultdict(list)
+        for client in p["clients"]:
+            if client.get("source_networker") != source:
+                continue
+            name = client.get("client_name")
+            memberships = client.get("protection_groups")
+            if isinstance(name, str) and name.strip() and isinstance(memberships, list):
+                for group in memberships:
+                    if isinstance(group, str):
+                        members[group].add(name.strip().lower().rstrip("."))
+        for group in p["protection_groups"]:
+            groups[group.get("name")].append(group)
+        for workflow in p["workflows"]:
+            if workflow.get("source_networker") == source:
+                workflows[(workflow.get("policy_name"), workflow.get("workflow_name"))].append(workflow)
+        relations = self.relations
+        for key, values in workflows.items():
+            if len({digest(w.get("protection_groups")) for w in values}) != 1:
+                relations[key] = ([], "workflow_membership_conflict")
+                continue
+            references = values[0].get("protection_groups")
+            if not isinstance(references, list):
+                relations[key] = ([], "workflow_membership_missing")
+                continue
+            names, reason = set(), None
+            for reference in references:
+                definitions = groups.get(reference, [])
+                if not definitions:
+                    reason = "group_definition_missing"
+                    break
+                if len({digest(g) for g in definitions}) != 1:
+                    reason = "group_definition_conflict"
+                    break
+                group = definitions[0]
+                if group.get("work_item_source") == "Dynamic":
+                    reason = "dynamic_group_not_resolved"
+                    break
+                if group.get("work_item_type") != "Client" or group.get("work_item_source") != "Static":
+                    reason = "group_type_not_supported_or_unknown"
+                    break
+                if any(not isinstance(group.get(k), list) for k in ("work_items", "work_item_queries", "work_item_exclusions")):
+                    reason = "group_metadata_incomplete"
+                    break
+                if group.get("work_item_queries") or group.get("work_item_exclusions"):
+                    reason = "group_query_or_exclusions_not_resolved"
+                    break
+                names.update(members.get(reference, ()))
+            relations[key] = (sorted(names) if not reason else [], reason or "resolved")
+
+    def identify(self, job, observed):
+        when = self.latest_complete
+        key = (job.get("policy_name") or job.get("name"), job.get("workflow_name"))
+        configured, status = self.relations.get(key, ([], "workflow_relation_missing")) if when else ([], "unavailable")
+        if self.read_reason == "inventory_snapshot_conflict":
+            configured, status = [], "inventory_snapshot_conflict"
+        reasons = [status] if status != "resolved" else []
+        if self.latest_attempt and self.latest_collection_status != "success":
+            reasons.append("latest_inventory_partial_or_failed")
+        if self.read_reason:
+            reasons.append(self.read_reason)
+        actual = observed.get("hostnames", [])
+        names, origins = actual, observed.get("hostname_sources", [])
+        relation_status = "observed_only" if actual else "unidentified"
+        if status == "resolved":
+            if set(actual) - set(configured) or observed.get("observed_hostname_conflict"):
+                names, origins, relation_status = [], [], "configuration_observation_conflict"
+                reasons.append(relation_status)
+            else:
+                names = configured
+                origins = ["inventory.workflow_group_client"] + (origins if actual else [])
+                relation_status = "configured_and_observed" if actual else "configured" if names else "configured_empty"
+        return {"hostname": names[0] if len(names) == 1 else None, "hostnames": names,
+                "hostname_status": "conflict" if relation_status == "configuration_observation_conflict" else
+                    "identified" if len(names) == 1 else "multiple" if names else "unidentified",
+                "hostname_sources": sorted(set(origins)), "configured_hostnames": configured,
+                "observed_hostname_conflict": observed.get("observed_hostname_conflict", False),
+                "observed_hostnames": actual, "hostname_relation_status": relation_status,
+                "inventory_id": self.inventory_id,
+                "inventory_observed_at": when.isoformat() if when else None,
+                "inventory_last_attempt_at": self.latest_attempt.isoformat() if self.latest_attempt else None,
+                "inventory_last_collection_status": self.latest_collection_status,
+                "inventory_temporal_basis": "latest_successful_inventory" if self.inventory_id else None,
+                "inventory_status": status, "inventory_reasons": sorted(set(reasons))}
 
 
 def policy_host_key(source: str, policy: str, hostname: str) -> str:
@@ -317,7 +465,7 @@ def daily_failure_view(summary: dict, rows: list[dict]) -> dict:
         "failure_count": summary.get("failure_count"), "workflow_count": summary.get("workflow_count")}
 
 
-def running_candidates(hits: list[dict], source: str) -> dict[str, dict]:
+def running_candidates(hits: list[dict], source: str, inventory=None) -> dict[str, dict]:
     """Reuse the same O(N + connected candidates) relationship index as daily work."""
     children, roots, parents = [], defaultdict(list), defaultdict(list)
     for hit in hits:
@@ -337,13 +485,17 @@ def running_candidates(hits: list[dict], source: str) -> dict[str, dict]:
         for i in tuple(positions):
             if children[i].get("type", "").lower() == "backup action job":
                 positions.update(parents.get(str(children[i].get("job_id")), ()))
-        out[identity] = dict(job, **hostname_evidence(job, [children[i] for i in sorted(positions)], source),
+        evidence = hostname_evidence(job, [children[i] for i in sorted(positions)], source)
+        if inventory is not None:
+            evidence = inventory.identify(job, evidence)
+        out[identity] = dict(job, **evidence,
                              relationship_issues=issues)
     return out
 
 
 def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
-                config: NetworkerCurrentConfig, *, input_reasons: list[str] | None = None) -> dict[str, tuple[dict, list[dict]]]:
+                config: NetworkerCurrentConfig, *, input_reasons: list[str] | None = None,
+                inventory=None) -> dict[str, tuple[dict, list[dict]]]:
     groups = defaultdict(list)
     children = []
     by_root, by_parent = defaultdict(list), defaultdict(list)
@@ -395,6 +547,9 @@ def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
             result = "unconfirmed"
             reasons.append("future_execution_time")
         duration = (end - start).total_seconds() if start and end and end >= start else None
+        evidence = hostname_evidence(job, candidates, source)
+        if inventory is not None:
+            evidence = inventory.identify(job, evidence)
         record = {
             "source_networker": source, "policy_name": policy or None, "workflow_name": workflow or None,
             "backup_day": day if attribution != "unresolved" else None,
@@ -409,7 +564,7 @@ def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
             "analysis_reasons": sorted(set(reasons)), "evidence_reference": proof.get("reference"),
             "workflow_kind_confirmed": kind != "unknown",
             "action_evidence": _action_evidence(job.get("message")),
-            **hostname_evidence(job, candidates, source),
+            **evidence,
         }
         key = (day, policy, workflow) if policy and workflow and attribution != "unresolved" else (day, "unresolved", job["job_id"])
         groups[key].append(record)

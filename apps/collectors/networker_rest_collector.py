@@ -25,7 +25,7 @@ class NetworkerRestCollector(BaseCollector):
 
     async def collect(self, collection_class="fast"):
         result = await super().collect(collection_class)
-        if not result.ok and not result.skipped and collection_class in {"fast", "jobs"}:
+        if not result.ok and not result.skipped and collection_class in {"fast", "jobs", "inventory", "slow"}:
             # Even a whole collection failure must reach current availability;
             # source comes from configuration, never a hostname heuristic.
             return replace(result, payload=result.payload | {
@@ -57,6 +57,8 @@ class NetworkerRestCollector(BaseCollector):
             "clients": parsed["clients"],
             "policies": parsed["policies"],
             "workflows": parsed["workflows"],
+            "protection_groups": parsed["protection_groups"],
+            "inventory_status": parsed["inventory_status"],
             "monthly_report": parsed["monthly_report"],
             "raw": raw,
             "collection_status": "partial" if errors else "success",

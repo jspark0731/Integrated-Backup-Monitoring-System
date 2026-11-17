@@ -27,9 +27,10 @@ DEFAULT_ENDPOINTS = {
     "clients": "nwrestapi/v3/global/clients",
     "backups": "nwrestapi/v3/global/backups",
     "policies": "nwrestapi/v3/global/protectionpolicies",
+    "groups": "nwrestapi/v3/global/protectiongroups",
 }
 FAST_ENDPOINTS = {"jobs", "backups"}
-SLOW_ENDPOINTS = {"clients", "policies"}
+SLOW_ENDPOINTS = {"clients", "policies", "groups"}
 CLASS_ENDPOINTS = {
     "fast": FAST_ENDPOINTS,
     "slow": SLOW_ENDPOINTS,
@@ -47,9 +48,11 @@ FIELD_FILTERS = {
             "clientState",
             "operatingSystem",
             "backupType",
+            "protectionGroups",
         )
     ),
     "policies": "name,comment,resourceId,workflows",
+    "groups": "name,resourceId,workItemType,workItemSource,workItemSubType,workItems,workItemQueries,workItemExclusions,dynamicAssociation",
 }
 
 
@@ -109,6 +112,10 @@ class NetworkerRestClient:
                 if request.endpoint_name == "jobs":
                     items, completed_pages = await self._job_pages(request.endpoint, request.params, headers, auth)
                     responses[request.result_name] = {"jobs": items, "count": len(items)}
+                elif request.endpoint_name in SLOW_ENDPOINTS:
+                    key = {"clients": "clients", "policies": "protectionPolicies", "groups": "protectionGroups"}[request.endpoint_name]
+                    items, _ = await self._inventory_pages(request.endpoint, request.params, headers, auth, key)
+                    responses[request.result_name] = {key: items, "count": len(items)}
                 else:
                     await self._request_gap()
                     responses[request.result_name] = await self._get_json(
@@ -269,6 +276,50 @@ class NetworkerRestClient:
                 raise ValueError("jobs_next_filter_changed")
             params = next_params
         raise ValueError("jobs_page_budget_exhausted")
+
+    async def _inventory_pages(self, endpoint, params, headers, auth, key):
+        """Read list endpoints once per Inventory cycle, following only server next links."""
+        out, visited, seen, declared = [], set(), set(), 0
+        for page in range(1, JOB_PAGE_LIMIT + 1):
+            marker = (endpoint, tuple(sorted(params.items())))
+            if marker in visited:
+                raise ValueError("inventory_pagination_cycle")
+            visited.add(marker)
+            await self._request_gap()
+            response = await self._get_json(self._rest.client, endpoint, headers, auth, params,
+                                            reject_continuation=True)
+            if isinstance(response, list):
+                items, links, count = response, [], len(response)
+            elif isinstance(response, dict):
+                items, links = response.get(key), response.get("links", [])
+                count = response.get("count", len(items) if isinstance(items, list) else None)
+            else:
+                raise ValueError("invalid_inventory_response")
+            if (not isinstance(items, list) or any(not isinstance(i, dict) for i in items)
+                    or not isinstance(links, list) or type(count) is not int or count < 0):
+                raise ValueError("invalid_inventory_list_or_count")
+            for item in items:
+                resource = item.get("resourceId")
+                identity = (resource.get("id") if isinstance(resource, dict) else resource) if key == "clients" else item.get("name")
+                if isinstance(identity, str) and identity:
+                    if identity in seen:
+                        raise ValueError("inventory_pagination_duplicate")
+                    seen.add(identity)
+            out.extend(items)
+            declared = max(declared, count)
+            following = [l.get("href") for l in links if isinstance(l, dict) and l.get("rel") == "next"]
+            if not following:
+                if declared > len(out):
+                    raise ValueError("inventory_response_truncated")
+                return out, page
+            if len(following) != 1 or not isinstance(following[0], str):
+                raise ValueError("invalid_inventory_next_link")
+            url, origin = httpx.URL(urljoin(self._url(endpoint), following[0])), httpx.URL(self._url(endpoint))
+            if ((url.scheme, url.host, url.port, url.path) != (origin.scheme, origin.host, origin.port, origin.path)
+                    or any(url.params.get(k) != v for k, v in params.items() if k in {"q", "fl"})):
+                raise ValueError("unsafe_inventory_next_link")
+            params = dict(url.params)
+        raise ValueError("inventory_page_budget_exhausted")
 
     async def close(self) -> None:
         await self._rest.close()
