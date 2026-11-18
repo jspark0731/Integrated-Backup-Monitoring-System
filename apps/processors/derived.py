@@ -32,7 +32,8 @@ def _iter_networker_documents(
 ) -> Iterator[dict[str, Any]]:
     specs = (
         ("job", "jobs", ("job_id", "name")),
-        ("client", "clients", ("client_name", "client_id")),
+        # Preserve existing Client document IDs when client_id is the API clientId.
+        ("client", "clients", ("client_name", "resource_id")),
         ("policy", "policies", ("policy_name",)),
         ("workflow", "workflows", ("policy_name", "workflow_name")),
     )
@@ -343,7 +344,7 @@ def _networker_document_fields(
     if document_type == "client":
         return {
             "client": {
-                "resource_id": record.get("resource_id") or record.get("client_id"),
+                "resource_id": record.get("resource_id"),
                 "hostname": record.get("client_hostname") or record.get("client_name"),
                 "state": record.get("client_state"),
                 "backup_type": record.get("backup_type"),

@@ -229,6 +229,7 @@ def test_conflicting_legacy_save_claims_are_not_erased_by_configured_targets():
 ])
 async def test_inventory_api_requests_are_list_only_and_roundtrip_existing_writer_raw_snapshot(present, os_value):
     raw, requests = raw_inventory(), []
+    raw["clients"]["clients"][0]["clientId"] = "synthetic-client-uuid"
     if present:
         raw["clients"]["clients"][0]["os"] = os_value
     async def handler(request):
@@ -236,6 +237,12 @@ async def test_inventory_api_requests_are_list_only_and_roundtrip_existing_write
         if "operatingSystem" in request.url.params.get("fl", "").split(","):
             return httpx.Response(400, json={"message": "Invalid field: operatingSystem"})
         key = {"clients": "clients", "protectionpolicies": "policies", "protectiongroups": "groups"}[request.url.path.rsplit("/",1)[-1]]
+        if key == "clients" and request.url.params.get("type") != "advanced":
+            # Model the observed API: basic responses omit OS.
+            basic = deepcopy(raw[key])
+            for item in basic["clients"]:
+                item.pop("os", None)
+            return httpx.Response(200, json=basic)
         return httpx.Response(200, json=raw[key])
     collector = NetworkerRestCollector(client_config(schedule=CollectionSchedulesConfig(
         jobs=ScheduleConfig(interval_minutes=5), inventory=ScheduleConfig(interval_minutes=1440))))
@@ -246,14 +253,19 @@ async def test_inventory_api_requests_are_list_only_and_roundtrip_existing_write
         await collector.close()
     assert collected.ok and collected.payload["inventory_status"]["complete"] is True
     assert len(requests) == 3 and all(r.method == "GET" for r in requests)
-    assert requests[0].url.params["fl"] == "resourceId,hostname,clientState,backupType,protectionGroups,os"
-    assert "type" not in requests[0].url.params  # No evidence that advanced is mandatory for os.
+    assert requests[0].url.params["fl"] == "resourceId,clientId,hostname,clientState,backupType,protectionGroups,os"
+    assert requests[0].url.params["type"] == "advanced"
     assert collected.payload["clients"][0]["protection_groups"] == ["GROUP"]
     actions = ElasticsearchWriter(ElasticsearchConfig())._actions_for_result(collected)
     document = next(a["_source"] for a in actions if a["_source"].get("document_type") == "client")
     expected = os_value if isinstance(os_value, str) else ""
     assert document["client"]["os"] == document["payload"]["client_os"] == expected
     assert document["payload"]["protection_groups"] == ["GROUP"]
+    assert document["payload"]["client_id"] == "synthetic-client-uuid"
+    assert document["payload"]["resource_id"] == document["client"]["resource_id"] == "resource-0"
+    assert next(a["_id"] for a in actions if a["_source"] is document) == (
+        "networker_core:client:node-a:resource-0:" + collected.collected_at.strftime("%Y-%m")
+    )
     stored_raw = next(a["_source"] for a in actions if a["_index"].startswith("nw-ops-raw-"))
     assert stored_raw["payload"]["raw"]["clients"]["clients"] == raw["clients"]["clients"]
 
@@ -266,13 +278,41 @@ def test_client_os_preserves_api_string_and_wins_over_legacy_operating_system_al
     assert parsed["inventory_status"]["complete"] is True
 
 
+@pytest.mark.parametrize("resource", [{"id": "resource-0"}, "resource-0", None])
+@pytest.mark.parametrize("client_id", ["synthetic-client-uuid", None])
+def test_api_client_identity_does_not_change_existing_client_document_ids(resource, client_id):
+    raw = raw_inventory()
+    item = raw["clients"]["clients"][0]
+    item["resourceId"] = resource
+    if client_id is not None:
+        item["clientId"] = client_id
+    parsed = parse_networker_rest_payload(raw, "networker_core", source_networker="core")
+    record = parsed["clients"][0]
+    expected_resource = "resource-0" if resource is not None else ""
+    assert record["client_id"] == (client_id or "")
+    assert record["resource_id"] == expected_resource
+    writer = ElasticsearchWriter(ElasticsearchConfig())
+    def action(payload):
+        result = CollectionResult(collector="networker_core", target_type="Networker", protocol="rest",
+                                  collected_at=NOW, ok=True, payload=payload, collection_class="inventory")
+        return next(a for a in writer._actions_for_result(result)
+                    if a["_source"].get("document_type") == "client")
+    before = deepcopy(parsed)
+    before["clients"][0]["client_id"] = expected_resource  # Previous normalized representation.
+    actual = action(parsed)
+    assert actual["_id"] == action(before)["_id"]
+    suffix = ":resource-0" if expected_resource else ""
+    assert actual["_id"] == f"networker_core:client:node-a{suffix}:{NOW:%Y-%m}"
+    assert actual["_source"]["client"]["resource_id"] == expected_resource
+
+
 def test_client_os_mapping_fragment_reuses_existing_field_without_new_index_contract():
     value = json.loads(Path("config/elasticsearch_networker_client_os_mapping.example.json").read_text())
     assert value == {"properties": {"client": {"properties": {"os": {"type": "keyword"}}}}}
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("fault", ["truncated", "cross_origin", "cycle", "malformed", "duplicate"])
+@pytest.mark.parametrize("fault", ["truncated", "cross_origin", "cycle", "malformed", "duplicate", "type_changed"])
 async def test_inventory_invalid_pages_are_partial_and_never_healthy_empty(fault):
     async def handler(request):
         if request.url.path.endswith("/clients"):
@@ -283,6 +323,8 @@ async def test_inventory_invalid_pages_are_partial_and_never_healthy_empty(fault
                 response = {"clients": None}
             if fault == "duplicate":
                 response = {"clients": [{"resourceId": {"id": "same-resource"}, "hostname": "node-a"}]*2, "count": 2}
+            if fault == "type_changed":
+                response["links"] = [{"rel": "next", "href": str(request.url.copy_set_param("type", "basic"))}]
             return httpx.Response(200, json=response)
         return httpx.Response(200, json={"protectionGroups": [], "protectionPolicies": [], "count": 0})
     instance = client(handler)
@@ -316,6 +358,7 @@ async def test_inventory_pagination_keeps_memberships_and_filters_without_per_cl
     assert ERRORS_KEY not in response
     assert len(response["clients"]["clients"]) == 2
     assert len(calls) == 4 and all(r.url.params.get("fl") == calls[0].url.params["fl"] for r in calls[:2])
+    assert all(r.url.params["type"] == "advanced" for r in calls[:2])
 
 
 def test_partial_inventory_without_membership_and_same_timestamp_conflict_are_not_used():

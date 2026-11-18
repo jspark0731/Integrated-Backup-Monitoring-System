@@ -517,7 +517,7 @@ async def test_networker_debug_log_contains_q_without_fl(caplog) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("field_filter", [True, False])
-@pytest.mark.parametrize("endpoint", [None, "nwrestapi/v3/global/clients?fl=operatingSystem"])
+@pytest.mark.parametrize("endpoint", [None, "nwrestapi/v3/global/clients?fl=operatingSystem&type=basic"])
 async def test_networker_inventory_requests_clients_policies_and_group_metadata(field_filter, endpoint) -> None:
     requests = []
 
@@ -556,8 +556,10 @@ async def test_networker_inventory_requests_clients_policies_and_group_metadata(
         "/nwrestapi/v3/global/protectiongroups",
     ]
     assert requests[0][1]["fl"] == (
-        "resourceId,hostname,clientState,backupType,protectionGroups,os"
+        "resourceId,clientId,hostname,clientState,backupType,protectionGroups,os"
     )
+    assert requests[0][1]["type"] == "advanced"
+    assert all("type" not in params for _, params in requests[1:])
     assert ("fl" in requests[1][1]) is field_filter
     assert set(payloads) == {"clients", "policies", "groups"}
 

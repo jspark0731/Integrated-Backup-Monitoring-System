@@ -44,6 +44,7 @@ FIELD_FILTERS = {
     "clients": ",".join(
         (
             "resourceId",
+            "clientId",
             "hostname",
             "clientState",
             "backupType",
@@ -316,7 +317,7 @@ class NetworkerRestClient:
                 raise ValueError("invalid_inventory_next_link")
             url, origin = httpx.URL(urljoin(self._url(endpoint), following[0])), httpx.URL(self._url(endpoint))
             if ((url.scheme, url.host, url.port, url.path) != (origin.scheme, origin.host, origin.port, origin.path)
-                    or any(url.params.get(k) != v for k, v in params.items() if k in {"q", "fl"})):
+                    or any(url.params.get(k) != v for k, v in params.items() if k in {"q", "fl", "type"})):
                 raise ValueError("unsafe_inventory_next_link")
             params = dict(url.params)
         raise ValueError("inventory_page_budget_exhausted")
@@ -437,7 +438,7 @@ def _build_request_plan(
     for name, endpoint in endpoints.items():
         field_params = {}
         if name == "clients":
-            field_params = {"fl": FIELD_FILTERS[name]}
+            field_params = {"fl": FIELD_FILTERS[name], "type": "advanced"}
         elif field_filter and name in FIELD_FILTERS:
             field_params = {"fl": FIELD_FILTERS[name]}
         if name == "jobs":

@@ -170,7 +170,7 @@ def _normalize_client(item: dict[str, Any], server: str, source_networker: str) 
     return {
         "server": server,
         "source_networker": source_networker,
-        "client_id": _resource_id(item),
+        "client_id": _string(item.get("clientId")),
         "resource_id": _resource_id(item),
         "client_name": hostname,
         "client_state": _normalize_client_state(item.get("clientState")),
