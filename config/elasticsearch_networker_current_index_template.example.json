@@ -5,7 +5,7 @@
     "nw-current-info"
   ],
   "priority": 450,
-  "version": 5,
+  "version": 6,
   "_meta": {
     "description": "Daily Workflow results, live executions and daily Policy-host failure keys; current-only dashboards"
   },
@@ -44,6 +44,13 @@
           "type": "keyword"
         },
         "result_detail": {
+          "type": "keyword"
+        },
+        "failure_message": {
+          "type": "text",
+          "index": false
+        },
+        "failure_message_job_id": {
           "type": "keyword"
         },
         "workflow_kind": {

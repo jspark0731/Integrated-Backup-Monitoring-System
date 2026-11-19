@@ -117,13 +117,15 @@ BASELINE_HASHES = {
 @pytest.mark.parametrize("name", sorted(compatibility_cases()))
 def test_complete_output_matches_pre_optimization_baseline(name):
     output = processor.build_daily(*compatibility_cases()[name])
-    # New hostname evidence intentionally participates in generation. Compare the
+    # New hostname and failure display evidence intentionally participate in generation. Compare the
     # complete OLD field contract against the captured baseline, without changing
     # any outcome, reasons, selection, attribution or duration expectations.
     for summary, rows in output.values():
         for row in rows:
             for field in ("hostname", "hostnames", "hostname_status", "hostname_sources"):
                 row.pop(field)
+            for field in ("failure_message", "failure_message_job_id"):
+                row.pop(field, None)
         semantic = [{k: v for k, v in row.items() if k not in {
             "source_observed_at", "document_kind", "generation", "updated_at", "window_start", "window_end"}}
             for row in rows]

@@ -607,7 +607,7 @@ async def test_collector_to_actual_writer_preserves_audit_and_produces_running_a
 def test_new_fields_are_explicitly_mapped_without_changing_index_patterns():
     mapping = json.loads(Path("config/elasticsearch_networker_current_index_template.example.json").read_text())
     p = mapping["template"]["mappings"]["properties"]
-    assert mapping["version"] == 5 and mapping["index_patterns"] == ["nw-current-core", "nw-current-chnl", "nw-current-info"]
+    assert mapping["version"] == 6 and mapping["index_patterns"] == ["nw-current-core", "nw-current-chnl", "nw-current-info"]
     assert p["failed_policy_host_keys"]["type"] == "keyword"
     assert p["last_observed_at"]["type"] == "date"
     assert p["unfinished_workflows"] == {"type": "object", "enabled": False}

@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 import hashlib
 import json
+import re
 from urllib.parse import quote
 from typing import Any
 
@@ -24,6 +25,13 @@ RESULTS = {
     "neverstarted": ("failed", "not_run"), "didnotrun": ("failed", "not_run"),
     "missedtheschedule": ("failed", "not_run"),
 }
+_STATUS_ONLY_MESSAGE = re.compile(
+    r"^(?:(?:job|backup|save|action|workflow|status|completion[\s_-]*status|error)"
+    r"(?:\s+\d+)?[\s:=-]*)*"
+    r"(?:failed|failure|canceled|cancelled|aborted|abandoned|communicationlost|unknown|"
+    r"neverstarted|didnotrun|missedtheschedule|completed|succeeded|success|error)[\s.!;]*$",
+    re.IGNORECASE,
+)
 
 
 def timestamp(value: Any) -> datetime | None:
@@ -217,6 +225,62 @@ def classify(job: dict, proof: dict, children: list[dict], source: str) -> tuple
     if reasons and not (result in {"success", "failed"} and set(reasons).issubset(qualifications)):
         return "unconfirmed", detail, kind, reasons
     return result, detail, kind, reasons
+
+
+def failure_message_detail(job: dict, candidates: list[dict], source: str) -> dict:
+    """Display-only child evidence using the existing strict Action/Save links.
+
+    No inference from missing children, Workflow messages or target names. Like
+    hostname attribution, a Save needs a same-source parent Action with one
+    execution interval and a matching Workflow root, all within the parent times.
+    """
+    start, end = timestamp(job.get("start_time")), timestamp(job.get("end_time"))
+    actions = defaultdict(list)
+    for child in candidates:
+        if (child.get("source_networker") != source
+                or child.get("type", "").lower() != "backup action job"
+                or str(child.get("root_parent_job_id")) != str(job["job_id"])
+                or str(child.get("parent_job_id")) != str(job["job_id"])):
+            continue
+        cs, ce = timestamp(child.get("start_time")), timestamp(child.get("end_time"))
+        if start and cs and cs >= start and (not end or ce and cs <= ce <= end):
+            actions[str(child.get("job_id"))].append(child)
+    # Conflicting copies cannot prove which Action execution contains a Save.
+    actions = {identity: copies for identity, copies in actions.items()
+               if len({(c.get("start_time"), c.get("end_time")) for c in copies}) == 1}
+    linked = [c for copies in actions.values() for c in copies]
+    for child in candidates:
+        if (child.get("source_networker") != source or child.get("type", "").lower() != "save job"
+                or str(child.get("root_parent_job_id")) != str(job["job_id"])):
+            continue
+        parents = actions.get(str(child.get("parent_job_id")), [])
+        if not parents:
+            continue
+        cs, ce = timestamp(child.get("start_time")), timestamp(child.get("end_time"))
+        ps, pe = timestamp(parents[0].get("start_time")), timestamp(parents[0].get("end_time"))
+        if cs and ps and cs >= ps and (not end or ce and cs <= ce <= end) and (not pe or ce and ce <= pe):
+            linked.append(child)
+    choices = defaultdict(list)
+    for child in linked:
+        completion = str(child.get("completion_status") or "").strip().lower()
+        state = str(child.get("state_raw") or child.get("state") or "").strip().lower()
+        outcome = RESULTS.get(completion, RESULTS.get(state, (None, None)))[0]
+        message = child.get("message")
+        identity = child.get("job_id")
+        if (outcome != "failed" or identity in (None, "", 0, "0") or not isinstance(message, str)
+                or not message.strip() or all(_STATUS_ONLY_MESSAGE.fullmatch(line.strip())
+                                             for line in message.splitlines() if line.strip())):
+            continue
+        # Same ordering convention as final-run selection; content breaks copy
+        # ties deterministically without making input order or domain copies win.
+        rank = (timestamp(child.get("end_time")) or timestamp(child.get("start_time")),
+                str(identity), digest(message.strip()))
+        choices[child["type"].lower()].append((rank, message.strip(), str(identity)))
+    pool = choices["save job"] or choices["backup action job"]
+    if not pool:
+        return {"failure_message": "Check NMC", "failure_message_job_id": None}
+    _, message, identity = max(pool)
+    return {"failure_message": message, "failure_message_job_id": identity}
 
 
 def hostname_evidence(job: dict, candidates: list[dict], source: str) -> dict:
@@ -566,6 +630,8 @@ def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
             "action_evidence": _action_evidence(job.get("message")),
             **evidence,
         }
+        if result == "failed":
+            record.update(failure_message_detail(job, candidates, source))
         key = (day, policy, workflow) if policy and workflow and attribution != "unresolved" else (day, "unresolved", job["job_id"])
         groups[key].append(record)
     details_by_day = defaultdict(list)
@@ -580,6 +646,9 @@ def build_daily(hits: list[dict], source: str, days: list[str], now: datetime,
         if len(ties) > 1:
             selected["dashboard_result"] = "unconfirmed"
             selected["analysis_reasons"] = sorted(set(selected["analysis_reasons"] + ["final_execution_order_ambiguous"]))
+        if selected["dashboard_result"] != "failed":
+            selected.pop("failure_message", None)
+            selected.pop("failure_message_job_id", None)
         selected["observed_execution_count"] = len(runs)
         selected["excluded_execution_count"] = sum(r["dashboard_result"] in {"excluded", "running"} for r in runs)
         selected["selection_reason"] = "latest_nonexcluded_completion" if eligible else "excluded_or_incomplete_only"
