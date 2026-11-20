@@ -35,7 +35,7 @@ data:
         protocol: rest
         enabled: true
         schedule:
-          jobs: {interval_minutes: 5, minute_offset: 1, second: 20}
+          jobs: {interval_minutes: 3, minute_offset: 1, second: 30}
           backups: {interval_minutes: 15, minute_offset: 9, second: 20}
           inventory: {interval_minutes: 1440, minute_offset: 198, second: 20}
         base_url: networker_chnl_base_url_TO_BE_FILLED
